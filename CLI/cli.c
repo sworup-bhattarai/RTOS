@@ -302,7 +302,7 @@ void kill(uint32_t pid)
 void pmap(uint32_t pid)
 {
     char str[10];
-    putsUart0("killed pid: ");
+    putsUart0("Memory usage by ");
     selfIToA(pid, str, 10);
     putsUart0(str);
     putcUart0('\n');
@@ -412,7 +412,7 @@ int main(void)
         if (isCommand(&data, "ipcs", 0))
         {
             valid = true;
-            ps();
+            ipcs();
         }
         if (isCommand(&data, "kill", 1))
         {
@@ -426,9 +426,10 @@ int main(void)
         {
             int pidint;
             char* pid = getFieldString(&data, 1);
-            valid = true;
+
             pidint = selfAtoi(pid);
             pmap(pidint);
+            valid = true;
         }
         if (isCommand(&data, "sched", 1))
         {
@@ -453,9 +454,16 @@ int main(void)
             valid = true;
             pidof(pid);
         }
+        if (isCommand(&data, "run", 1))
+        {
+
+            char* pid = getFieldString(&data, 1);
+            valid = true;
+            setPinValue(RED_LED, 1);
+        }
         // Look for error
         if (!valid)
-            putsUart0("Invalid command\0");
+            putsUart0("Invalid command\n");
 
     }
 }
