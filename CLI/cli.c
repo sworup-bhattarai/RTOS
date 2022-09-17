@@ -3,8 +3,7 @@
 //-----------------------------------------------------------------------------
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdio.h>
-#include <string.h>
+
 #include <stdlib.h>
 #include <math.h>
 #include "clock.h"
@@ -15,7 +14,7 @@
 
 #define RED_LED PORTF,1
 #define GREEN_LED PORTF,3
-
+//#define DEBUG
 
 
 //-----------------------------------------------------------------------------
@@ -343,6 +342,29 @@ pidof(const char name[])
     putcUart0('\n');
 
 }
+
+//-----------------------------------------------------------------------------
+// reboot
+//-----------------------------------------------------------------------------
+void reboot()
+{
+    NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
+}
+//-----------------------------------------------------------------------------
+// lowercase
+//-----------------------------------------------------------------------------
+void lowercase(USER_DATA* d)
+{
+    int i;
+    for (i = 0; d->buffer[i]!='\0'; i++)
+    {
+        if(d->buffer[i] >= 'A' && d->buffer[i] <= 'Z')
+        {
+            d->buffer[i] = d->buffer[i] +32;
+        }
+    }
+
+}
 //-----------------------------------------------------------------------------
 // Main
 //-----------------------------------------------------------------------------
@@ -365,10 +387,13 @@ int main(void)
     while(true)
     {
         valid = false;
-        putcUart0('>');
+
         // Get the string from the user
         getsUart0(&data);
+        lowercase(&data);
         //putsUart0("Invalid command \0");
+
+
 
         // Echo back to the user of the TTY interface for testing
         #ifdef DEBUG
@@ -413,7 +438,8 @@ int main(void)
             valid = true;
             putsUart0("REBOOTING......");
             putcUart0('\n');
-            startUpFlash();
+            reboot();
+            // APINT
         }
         if (isCommand(&data, "ps", 0))
         {
