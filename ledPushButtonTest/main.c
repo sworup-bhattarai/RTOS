@@ -38,6 +38,8 @@ void initHw()
     selectPinPushPullOutput(YELLOW_LED);
     selectPinPushPullOutput(ORANGE_LED);
 
+    setPinCommitControl(PB1);
+
     selectPinDigitalInput(PB0);
     selectPinDigitalInput(PB1);
     selectPinDigitalInput(PB2);
@@ -51,6 +53,7 @@ void initHw()
     enablePinPullup(PB4);
     enablePinPullup(PB5);
 
+
 }
 
 
@@ -60,6 +63,7 @@ int main(void)
     initHw();
     initUart0();
     setUart0BaudRate(115200, 40e6);
+    GPIO_PORTD_LOCK_R = 0x4C4F434B;
 
 
     setPinValue(BLUE_LED, 1);
@@ -72,31 +76,64 @@ int main(void)
     waitMicrosecond(100000);
     setPinValue(ORANGE_LED, 1);
 
+    uint8_t prev = 0;
     while(true)
     {
-        if(!getPinValue(PB0))
+        if(!getPinValue(PB0) & prev != 1)
         {
             putsUart0("PB0 Pushed\n");
+            setPinValue(BLUE_LED, 0);
+
+            prev = 1;
         }
-        if(!getPinValue(PB1))
+        if(!getPinValue(PB1) & prev != 2)
         {
             putsUart0("PB1 Pushed\n");
+            setPinValue(GREEN_LED, 0);
+
+            prev = 2;
         }
-        if(!getPinValue(PB2))
+        if(!getPinValue(PB2) & prev != 3)
         {
             putsUart0("PB2 Pushed\n");
+            setPinValue(BLUE_LED, 1);
+            setPinValue(GREEN_LED, 1);
+            setPinValue(RED_LED, 0);
+            setPinValue(YELLOW_LED, 1);
+            setPinValue(ORANGE_LED, 0);
+
+            prev = 3;
         }
-        if(!getPinValue(PB3))
+        if(!getPinValue(PB3) & prev != 4)
         {
             putsUart0("PB3 Pushed\n");
+            setPinValue(BLUE_LED, 0);
+            setPinValue(GREEN_LED, 1);
+            setPinValue(RED_LED, 0);
+            setPinValue(YELLOW_LED, 1);
+            setPinValue(ORANGE_LED, 0);
+
+            prev = 4;
         }
-        if(!getPinValue(PB4))
+        if(!getPinValue(PB4) & prev != 5)
         {
             putsUart0("PB4 Pushed\n");
+            setPinValue(BLUE_LED, 1);
+            setPinValue(GREEN_LED, 0);
+            setPinValue(RED_LED, 1);
+            setPinValue(YELLOW_LED, 0);
+            setPinValue(ORANGE_LED, 1);
+            prev = 5;
         }
-        if(!getPinValue(PB5))
+        if(!getPinValue(PB5) & prev != 6)
         {
             putsUart0("PB5 Pushed\n");
+            setPinValue(BLUE_LED, 1);
+            setPinValue(GREEN_LED, 1);
+            setPinValue(RED_LED, 1);
+            setPinValue(YELLOW_LED, 1);
+            setPinValue(ORANGE_LED, 1);
+            prev = 6;
         }
     }
 
