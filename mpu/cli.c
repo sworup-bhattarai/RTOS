@@ -358,11 +358,15 @@ int main(void)
 
     NVIC_SYS_HND_CTRL_R = NVIC_SYS_HND_CTRL_USAGE| NVIC_SYS_HND_CTRL_BUS| NVIC_SYS_HND_CTRL_MEM;
     NVIC_CFG_CTRL_R = NVIC_CFG_CTRL_DIV0;
-
-    setPSP((uint32_t)&stack);
+    uint32_t * psp = (uint32_t*) 0x20008000;
+    setPSP(psp);
     setASPbit();
 
 
+
+}
+int main2(void)
+{
     setPinValue(BLUE_LED, 1);
     waitMicrosecond(100000);
     setPinValue(GREEN_LED, 1);
@@ -431,5 +435,7 @@ int main(void)
             prev = 6;
         }
     }
+
+
 
 }

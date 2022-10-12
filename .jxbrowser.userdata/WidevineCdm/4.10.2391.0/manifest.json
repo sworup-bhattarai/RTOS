@@ -15,19 +15,19 @@
     "cbcs"
   ],
   "icons": {
-    "128": "imgs/icon-128x128.png",
-    "16": "imgs/icon-128x128.png"
+    "16": "imgs/icon-128x128.png",
+    "128": "imgs/icon-128x128.png"
   },
   "platforms": [
     {
+      "os": "win",
       "arch": "x64",
-      "os": "mac",
-      "sub_package_path": "_platform_specific/mac_x64/"
+      "sub_package_path": "_platform_specific/win_x64/"
     },
     {
-      "arch": "arm64",
-      "os": "mac",
-      "sub_package_path": "_platform_specific/mac_arm64/"
+      "os": "win",
+      "arch": "x86",
+      "sub_package_path": "_platform_specific/win_x86/"
     }
   ]
 }

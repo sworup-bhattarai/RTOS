@@ -1,0 +1,5 @@
+2022/10/11-15:03:41.651 2518 Log #3: 2 ops saved to Table #4 OK
+2022/10/11-15:03:41.652 2518 Archiving C:\Users\Sworup\Desktop\RTOS\.jxbrowser.userdata\Default\Site Characteristics Database/000003.log: OK
+2022/10/11-15:03:41.652 2518 Table #4: 2 entries OK
+2022/10/11-15:03:41.653 2518 Archiving C:\Users\Sworup\Desktop\RTOS\.jxbrowser.userdata\Default\Site Characteristics Database/MANIFEST-000001: OK
+2022/10/11-15:03:41.667 2518 **** Repaired leveldb C:\Users\Sworup\Desktop\RTOS\.jxbrowser.userdata\Default\Site Characteristics Database; recovered 1 files; 191 bytes. Some data may have been lost. ****
