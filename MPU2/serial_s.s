@@ -26,6 +26,7 @@
    .def putcUart0
    .def putsUart0
    .def getcUart0
+   .def setTMPLbit
    .def setASPbit
    .def setPSP
    .def getPSP
@@ -81,6 +82,12 @@ getcUart0Data: LDR    R0, UART0_DR_R         ; get pointer to UART data register
                LDR    R0, [R0]               ; read received data
                AND    R0, R0, #0xFF          ; mask off all but bits 0-7
 			   BX	  LR                     ; return from subroutine
+
+setTMPLbit:
+			   MRS	  R0, CONTROL
+			   ORR	  R0, R0, #1
+			   MSR	  CONTROL, R0
+			   BX	  LR
 
 
 setASPbit:

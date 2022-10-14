@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdio.h>
 #include <stdbool.h>
 #include "uart0.h"
 #include "clock.h"
@@ -19,9 +20,21 @@
 #define PB4 PORTC,6
 #define PB5 PORTC,7
 
-#define fullAccess (3 << 24)
-#define fullSize (0x1f << 1)
+#define size(x) (1 << x)
+#define APmode1 (0x1 << 24) //APmode Access from privileged software only
+#define fullAccess (0x3 << 24) //   0111 -> 0011 0000 0000 APmode 3
+#define fullSize (0x1f << 1)   // 1 1111 -> 0011 1110 31 shifted 1 bit
 
+#define region0  0x00000000
+#define region1  0x00000001
+#define region2  0x00000002
+#define region3  0x00000003
+#define region4  0x00000004
+#define region5  0x00000005
+#define region6  0x00000006
+
+
+extern setTMPLbit();
 extern setASPbit();
 extern setPSP();
 extern getMSP();
@@ -29,10 +42,9 @@ extern getPSP();
 extern putcUart0();
 extern putsUart0();
 extern getcUart0();
-extern uint32_t __STACK_TOP;
-uint32_t stack[256];
-uint32_t  *heap = ( uint32_t *)0x20001400;
 
+uint32_t  *heap = ( uint32_t *)0x20007000;
+uint32_t * psp = (uint32_t*) 0x20008000;
 
 
 //-----------------------------------------------------------------------------
@@ -55,6 +67,8 @@ char* reverse(char *buf, uint16_t i, uint16_t j)
     }
     return buf;
 }
+
+
 //-----------------------------------------------------------------------------
 // selfIToA ---- code implementation based on code from geeksforgeeks, https://www.geeksforgeeks.org/implement-itoa/
 //-----------------------------------------------------------------------------
@@ -106,6 +120,8 @@ int selfAtoi(char* str)//code implementation based on code from geeksforgeeks, h
     return result;
 
 }
+
+
 void initHw()
 {
     // Initialize system clock to 40 MHz
@@ -142,29 +158,7 @@ void initHw()
 
 
 }
-//-----------------------------------------------------------------------------
-// stackDump
-//-----------------------------------------------------------------------------
-void stackDump(void)
-{
-    char str[50];
-    uint32_t  row = (uint32_t*)__STACK_TOP;
-    uint8_t i = 0;
-    putsUart0("Dump Of Stack:\n");
-    uint32_t * val = 0;
-    for(i = 0; i <= 255; i++)
-    {
-        val = (uint32_t *) row;
-        row++;
-        selfIToA(&val, str, 16);
-        putsUart0("0x");
-        putsUart0(str);
-        putsUart0("\n ");
-        //row = row + 4;
-    }
 
-
-}
 
 //-----------------------------------------------------------------------------
 // processstackDump
@@ -172,25 +166,28 @@ void stackDump(void)
 void processStackDump(void)
 {
     char str[50];
-    uint32_t  val, pc, lr, R0, R1, R2, R3, R12;
-    pc = 0;
+    uint32_t  PC, LR, R0, R1, R2, R3, R12, xPSR;
+    uint32_t *  val;
+    PC = 0;
     val = getPSP();
 
-    pc = (uint32_t *) val;
-    lr = (uint32_t *) val + 1;
-    R0  = (uint32_t *) val + 2;
-    R1  = (uint32_t *) val + 3;
-    R2  = (uint32_t *) val + 4;
-    R3  = (uint32_t *) val + 5;
-    R12  = (uint32_t *) val + 14;
+    R0   = * val;
+    R1   = *(val + 1);
+    R2   = *(val + 2);
+    R3   = *(val + 3);
+    R12  = *(val + 4);
+    LR   = *(val + 5);
+    PC   = *(val + 6);
+    xPSR   = *(val + 7);
+
 
     putsUart0("PC Value: 0x");
-    selfIToA(pc , str, 16);
+    selfIToA(PC , str, 16);
     putsUart0(str);
     putsUart0("\n");
 
     putsUart0("LR Value: 0x");
-    selfIToA(lr, str, 16);
+    selfIToA(LR, str, 16);
     putsUart0(str);
     putsUart0("\n");
 
@@ -219,6 +216,11 @@ void processStackDump(void)
     putsUart0(str);
     putsUart0("\n");
 
+    putsUart0("xPSR Value: 0x");
+    selfIToA(xPSR, str, 16);
+    putsUart0(str);
+    putsUart0("\n");
+
 }
 
 
@@ -236,7 +238,7 @@ void HARD_fault(void)
 
 
     pid = 0;
-    selfIToA(pid, str, 16);
+    selfIToA(pid, str, 10);
     putsUart0("Hard fault in process: \nPID: ");
     putsUart0(str);
     putsUart0("\n");
@@ -273,7 +275,7 @@ void HARD_fault(void)
     putsUart0(str);
     putsUart0("\n");
 
-    //stackDump();
+
 
     while(true){}
 }
@@ -286,7 +288,7 @@ void MPU_fault(void)
     pid = 0;
     char str[10];
     selfIToA(pid, str, 10);
-    putsUart0("Bus fault in process: ");
+    putsUart0("MPU fault in process: ");
     putsUart0(str);
     putsUart0("\n");
     uint32_t MSPval = 45;
@@ -332,30 +334,6 @@ void BUS_fault(void)
     putsUart0("\n");
 
 
-    uint32_t PSPval = 75;
-    PSPval = getPSP();
-    uint32_t * var;
-    var = getPSP();
-
-    putsUart0("PSP Value: 0x");
-    selfIToA(PSPval, str, 16);
-    putsUart0(str);
-    putsUart0("\n");
-
-    putsUart0("PC Value: 0x\n");
-    var++;
-    for(i = 25; i >=1; i--)
-    {
-        selfIToA(stack[i-1], str, 16);
-        putsUart0("0x");
-        putsUart0(str);
-        putsUart0("\n");
-    }
-    putsUart0("\n");
-
-    uint8_t z = 0;
-    uint8_t o = 1;
-    o = o/z;
 
     while(true){}
 }
@@ -406,34 +384,146 @@ void PENDSV_fault(void)
     while(true){}
 }
 
+
 //-----------------------------------------------------------------------------
 // malloc_from_heap
 //-----------------------------------------------------------------------------
 void * malloc_from_heap(int size_in_bytes)
 {
     char str[50];
+    void * p = heap;
     if(!(size_in_bytes % 1024 == 0))
     {
         size_in_bytes = size_in_bytes / 1024;
         size_in_bytes ++;
         size_in_bytes = size_in_bytes * 1024;
     }
-    putsUart0("Heap Alocated From:\n");
-    selfIToA(&heap, str, 10);
+    putsUart0("Heap Alocated From:\n0x");
+    selfIToA(heap, str, 16);
     putsUart0(str);
     putsUart0("\n");
 
-    heap += size_in_bytes;
-    if(&heap > (0x20007FFF))
-        return 0;
+    heap = heap + size_in_bytes/4;
+    if(heap > (0x20007FFF))
+         p = NULL;
 
-    putsUart0("Heap Alocated To:\n");
-    selfIToA(heap, str, 10);
+    putsUart0("Heap Alocated To:\n0x");
+    selfIToA(heap, str, 16);
     putsUart0(str);
-    putsUart0("\n");
-    return heap;
+    putsUart0("\n\n\n");
+    return p;
 
 
+}
+
+void backgroundEnable(void)
+{  //                                   0000 0010        0000 0000
+    NVIC_MPU_BASE_R = 0x00000000 | NVIC_MPU_BASE_VALID | region0; //REGION1
+    NVIC_MPU_ATTR_R = fullSize | fullAccess | NVIC_MPU_ATTR_ENABLE | NVIC_MPU_ATTR_XN;
+}   //                0011 1110   3000 0000         0000 0001           1000 0000
+
+void allowFlashAccess(void)
+{  //                                   0000 0010         0001
+    NVIC_MPU_BASE_R =  0x00000000 | NVIC_MPU_BASE_VALID | region1;
+    NVIC_MPU_ATTR_R = fullAccess | (0x11 << 1) | NVIC_MPU_ATTR_CACHEABLE | NVIC_MPU_ATTR_ENABLE;
+} //                  3000 0000     0000 0110         0002 0000               0000 0001
+
+void allowPeripheralAccess(void)
+{  //                                   0000 0010          0010
+    NVIC_MPU_BASE_R =  0x40000000 | NVIC_MPU_BASE_VALID | region2;
+    NVIC_MPU_ATTR_R = fullAccess | (0x25 << 1) | NVIC_MPU_ATTR_SHAREABLE | NVIC_MPU_ATTR_BUFFRABLE | NVIC_MPU_ATTR_ENABLE;
+}
+
+void setupSramAccess(void)
+{//                                                        0011
+    NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20000000 | region3 ;
+//    NVIC_MPU_NUMBER_R = 2;
+    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+
+    NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20002000 | region4 ;
+//    NVIC_MPU_NUMBER_R = 3;
+    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+
+    NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20004000 | region5 ;
+//    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+
+    NVIC_MPU_BASE_R =  NVIC_MPU_BASE_VALID | 0x20006000 | region6 ;
+//    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+
+}
+
+void setSramAccessWindow(uint32_t baseAdd, uint32_t size_in_bytes)
+{
+
+    uint16_t startSubregion = (baseAdd - 0x20000000) / 0x2000;
+    if(!(size_in_bytes % 1024 == 0))
+    {
+        size_in_bytes = size_in_bytes / 1024;
+        size_in_bytes++;
+        size_in_bytes = size_in_bytes * 1024;
+    }
+    uint16_t regNum = size_in_bytes / 0x400;
+    uint8_t i = 0;
+
+    uint32_t mask = 0;
+
+    while(i < regNum)
+    {
+        mask |= (1 <<  i);
+        i++;
+    }
+
+    mask <<= startSubregion * 8;
+
+    NVIC_MPU_NUMBER_R = 3;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 5;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 6;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+}
+
+void enableMPU()
+{
+    NVIC_MPU_CTRL_R = 1;
+}
+
+void disableMPU()
+{
+    NVIC_MPU_CTRL_R = 0;
+}
+
+void test()
+{
+    uint32_t * p = (uint32_t *) 0x20007000;
+    //setSramAccessWindow((uint32_t)p, 0x1000);
+    *p = 100;
+}
+
+
+int main2(void)
+{
+    backgroundEnable();
+    allowFlashAccess();
+    allowPeripheralAccess();
+    setupSramAccess();
+    setSramAccessWindow(0x20000000, 0x8000);
+    enableMPU();
+    setTMPLbit();
+    test();
+
+    while(1){}
 }
 
 
@@ -442,31 +532,17 @@ void * malloc_from_heap(int size_in_bytes)
 //-----------------------------------------------------------------------------
 int main(void)
 {
-
     // Initialize hardware
     initHw();
     initUart0();
     setUart0BaudRate(115200, 40e6);
-    //GPIO_PORTD_LOCK_R = 0x4C4F434B;
 
-    NVIC_SYS_HND_CTRL_R = NVIC_SYS_HND_CTRL_USAGE| NVIC_SYS_HND_CTRL_BUS| NVIC_SYS_HND_CTRL_MEM;
+    NVIC_SYS_HND_CTRL_R |= NVIC_SYS_HND_CTRL_USAGE | NVIC_SYS_HND_CTRL_BUS | NVIC_SYS_HND_CTRL_MEM;
     NVIC_CFG_CTRL_R = NVIC_CFG_CTRL_DIV0;
-    uint32_t * psp = (uint32_t*) 0x20008000;
-    setPSP(psp);
-    //setASPbit();
-    main2();
 
+//    uint32_t * psp = (uint32_t*) 0x20008000;
+    GPIO_PORTD_LOCK_R = 0x4C4F434B;
 
-}
-void backgroundEnable(void)
-{
-    NVIC_MPU_BASE_R |= NVIC_MPU_BASE_VALID;
-    NVIC_MPU_ATTR_R |= fullSize |  fullAccess | NVIC_MPU_ATTR_ENABLE;
-
-}
-
-int main2(void)
-{
     setPinValue(BLUE_LED, 1);
     waitMicrosecond(100000);
     setPinValue(GREEN_LED, 1);
@@ -490,18 +566,28 @@ int main2(void)
 
             prev = 1;
         }
-        if(!getPinValue(PB1) & prev != 2)// BUS AND HARD FAULT
+        if(!getPinValue(PB1) & prev != 2)// BUS  FAULT
         {
             putsUart0("PB1 Pushed\n");
             setPinValue(GREEN_LED, 0);
-            uint8_t * bus = (uint8_t *) 0x690000000;
+            uint8_t * bus = (uint8_t *) 0x40000000;
             *bus = 96;
             prev = 2;
         }
-        if(!getPinValue(PB2) & prev != 3)
+        if(!getPinValue(PB2) & prev != 3) //MPU/HARD FAULT
         {
-            putsUart0("PB2 Pushed\n");
-            t = 0;
+            backgroundEnable();
+            allowFlashAccess();
+            allowPeripheralAccess();
+            setupSramAccess();
+            setSramAccessWindow(0x20000000, 0x8000);
+            enableMPU();
+            setTMPLbit();
+            uint32_t *p = malloc_from_heap(1024);
+            *p = 1024;
+            // putsUart0("PB2 Pushed\n");
+
+            uint8_t * bus = (uint8_t *) 0x20007000;
             prev = 3;
         }
         if(!getPinValue(PB3) & prev != 4)
@@ -512,7 +598,7 @@ int main2(void)
             setPinValue(RED_LED, 0);
             setPinValue(YELLOW_LED, 1);
             setPinValue(ORANGE_LED, 0);
-
+            t = 0;
             prev = 4;
         }
         if(!getPinValue(PB4) & prev != 5)
@@ -537,11 +623,8 @@ int main2(void)
         }
     }
     putsUart0("Broke out!\n");
+    setPSP(psp);
+    setASPbit();
 
-    malloc_from_heap(1025);
-    backgroundEnable();
-
-
-
-    while(1){}
+    main2();
 }
