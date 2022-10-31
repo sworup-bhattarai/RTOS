@@ -105,9 +105,9 @@ char* selfIToA(int value, char* buffer, int base)
 }
 
 //-----------------------------------------------------------------------------
-// selfAtoi
+// selfAtoi code implementation based on code from geeksforgeeks, https://www.geeksforgeeks.org/write-your-own-atoi/
 //-----------------------------------------------------------------------------
-int selfAtoi(char* str)//code implementation based on code from geeksforgeeks, https://www.geeksforgeeks.org/write-your-own-atoi/
+int selfAtoi(char* str)//
 {
     int result = 0;
     int i;
@@ -335,7 +335,7 @@ void sched(bool prio_on)
 //-----------------------------------------------------------------------------
 // pidof
 //-----------------------------------------------------------------------------
-pidof(const char name[])
+void pidof(const char name[])
 {
     putsUart0(name);
     putsUart0(" launched");
