@@ -31,6 +31,9 @@
    .def setPSP
    .def getPSP
    .def getMSP
+   .def pushR4toR11
+   .def popR11toR4
+   .def pushToPSP
 
 ;-----------------------------------------------------------------------------
 ; Register values and large immediate values
@@ -91,14 +94,14 @@ setTMPLbit:
 
 
 setASPbit:
-			   MRS	  R0, CONTROL
+			   MRS	  R0, CONTROL			; writinig from special regester to regular regester
 			   ORR	  R0, R0, #2
 			   MSR	  CONTROL, R0
 			   ISB
 			   BX	  LR
 
 setPSP:
-			   MSR	  PSP, R0
+			   MSR	  PSP, R0				;writing from regular regester to special regester
 			   BX	  LR
 
 getMSP:
@@ -109,7 +112,52 @@ getPSP:
 			   MRS	  R0, PSP
 			   BX	  LR
 
+pushR4toR11:
+               MRS      R1,PSP
+               SUB      R1, #4
+               STR    	R4, [R1]
+               SUB      R1, #4
+               STR    	R5, [R1]
+               SUB      R1, #4
+               STR    	R6, [R1]
+               SUB      R1, #4
+               STR    	R7, [R1]
+               SUB      R1, #4
+               STR    	R8, [R1]
+               SUB      R1, #4
+               STR    	R9, [R1]
+               SUB      R1, #4
+               STR    	R10, [R1]
+               SUB      R1, #4
+               STR    	R11, [R1]
+               MSR      PSP, R1
+
+popR11toR4:
+			   MRS      R1,PSP
+               ADD      R1, #4
+               LDR    R11, [R1]
+               ADD      R1, #4
+               LDR    R10, [R1]
+               ADD      R1, #4
+               LDR    R9, [R1]
+               ADD      R1, #4
+               LDR    R8, [R1]
+               ADD      R1, #4
+               LDR    R7, [R1]
+               ADD      R1, #4
+               LDR    R6, [R1]
+               ADD      R1, #4
+               LDR    R5, [R1]
+               ADD      R1, #4
+               LDR    R4, [R1]
+               MSR      PSP, R1
 
 
+pushToPSP:
+               MRS    R1, PSP
+               SUB      R1, #4
+               STR    R0, [R1]
+               MSR      PSP, R1
+               BX       LR
 
 .endm

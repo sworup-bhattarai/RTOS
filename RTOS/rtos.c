@@ -92,6 +92,9 @@ extern getPSP();
 extern putcUart0();
 extern putsUart0();
 extern getcUart0();
+extern pushToPSP();
+extern pushR4toR11();
+extern popR11toR4();
 
 //-----------------------------------------------------------------------------
 // RTOS Defines and Kernel Variables
@@ -337,12 +340,7 @@ bool createSemaphore(uint8_t semaphore, uint8_t count)
     return ok;
 }
 
-void startRtosAfterPSP()
-{
-    _fn fn = (_fn)tcb[taskCurrent].pid; //sets the location of idle's fuction to fn
-    setTMPLbit();
-    fn();
-}
+
 // REQUIRED: modify this function to start the operating system
 // by calling scheduler, setting PSP, ASP bit, TMPL bit, and PC
 void startRtos()
@@ -350,33 +348,36 @@ void startRtos()
     taskCurrent = rtosScheduler(); //saves the task ID in taskCurrent to be reused later
     setPSP(tcb[taskCurrent].sp);
     //call a function to do the fn and set the tmpl
-    startRtosAfterPSP();
+    _fn fn = (_fn)tcb[taskCurrent].pid; //sets the location of idle's fuction to fn
+    setTMPLbit();
+    fn();
+
 }
 
 // REQUIRED: modify this function to yield execution back to scheduler using pendsv
 void yield() // PSP unprivilaged
 {
-    __asm(" SVC #6"); // calls svcISR with it's unique number
+    __asm("     SVC     #6");    // calls svcISR with it's unique number
 }
 
 // REQUIRED: modify this function to support 1ms system timer
 // execution yielded back to scheduler until time elapses using pendsv
 void sleep(uint32_t tick)
 {
-    __asm(" SVC #7");
+    __asm("     SVC     #7");
 }
 
 // REQUIRED: modify this function to wait a semaphore using pendsv
 void wait(int8_t semaphore)
 {
 
-    __asm(" SVC #8");
+    __asm("     SVC     #8");
 }
 
 // REQUIRED: modify this function to signal a semaphore is available using pendsv
 void post(int8_t semaphore)
 {
-    __asm(" SVC #9");
+    __asm("     SVC     #9");
 }
 
 // REQUIRED: modify this function to add support for the system timer
@@ -390,27 +391,36 @@ void systickIsr()
 void pendSvIsr()
 {
     uint8_t pid;
+
     pid = 0;
     char str[10];
-    putsUart0("PENDSV FAULT!\n");
-    putsUart0("PID:");
+    putsUart0("PENDSV\n");
     putsUart0("PID:");
     selfIToA(pid, str, 10);
     putsUart0(str);
     putsUart0("\n");
 
+    pushR4toR11();
+    popR11toR4();
+
+
+    pushToPSP(0x61000000);                  // xPSR
+    //pushToPSP(tcb[taskCurrent].sp);         //PC
+
+
 
     if((NVIC_FAULT_STAT_DERR & NVIC_FAULT_STAT_R) == NVIC_FAULT_STAT_DERR)
     {
-        NVIC_FAULT_STAT_R  &= ~NVIC_FAULT_STAT_DERR;
+        NVIC_FAULT_STAT_R  |= ~NVIC_FAULT_STAT_DERR;
     }
     if((NVIC_FAULT_STAT_IERR & NVIC_FAULT_STAT_R) == NVIC_FAULT_STAT_IERR)
     {
-        NVIC_FAULT_STAT_R  &= ~NVIC_FAULT_STAT_IERR;
+        NVIC_FAULT_STAT_R  |= ~NVIC_FAULT_STAT_IERR;
     }
 
 
-    while(true){}
+
+
 }
 
 // REQUIRED: modify this function to add support for the service call
