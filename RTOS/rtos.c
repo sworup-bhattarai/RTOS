@@ -1,7 +1,7 @@
 // RTOS Framework - Fall 2022
 // J Losh
 
-// Student Name: Sworup Bhattarai
+// Student Name: Fernanda, Sworup Bhattarai
 
 // TO DO: Add your name(s) on this line.
 //        Do not include your ID number(s) in the file.
@@ -405,7 +405,16 @@ void pendSvIsr()
 
 
     pushToPSP(0x61000000);                  // xPSR
-    //pushToPSP(tcb[taskCurrent].sp);         //PC
+    pushToPSP(tcb[taskCurrent].pid);        //PC
+    pushToPSP(0xFFFFFFF1);                  //LR
+    pushToPSP(0x00000000);                  //R12
+    pushToPSP(0x00000000);                  //R3
+    pushToPSP(0x00000000);                  //R2
+    pushToPSP(0x00000000);                  //R1
+    pushToPSP(0x00000000);                  //R0
+
+
+
 
 
 
@@ -427,7 +436,7 @@ void pendSvIsr()
 // REQUIRED: in preemptive code, add code to handle synchronization primitives
 void svCallIsr()
 {
-    NVIC_INT_CTRL_R|=NVIC_INT_CTRL_PEND_SV; // resets the SV bit
+    NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV; // resets the SV bit
 }
 
 // REQUIRED: code this function

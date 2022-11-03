@@ -131,32 +131,33 @@ pushR4toR11:
                SUB      R1, #4
                STR    	R11, [R1]
                MSR      PSP, R1
+               BX		LR
 
 popR11toR4:
 			   MRS      R1,PSP
                ADD      R1, #4
-               LDR    R11, [R1]
+               LDR    	R11, [R1]
                ADD      R1, #4
-               LDR    R10, [R1]
+               LDR    	R10, [R1]
                ADD      R1, #4
-               LDR    R9, [R1]
+               LDR    	R9, [R1]
                ADD      R1, #4
-               LDR    R8, [R1]
+               LDR    	R8, [R1]
                ADD      R1, #4
-               LDR    R7, [R1]
+               LDR    	R7, [R1]
                ADD      R1, #4
-               LDR    R6, [R1]
+               LDR    	R6, [R1]
+               ADD   	R1, #4
+               LDR    	R5, [R1]
                ADD      R1, #4
-               LDR    R5, [R1]
-               ADD      R1, #4
-               LDR    R4, [R1]
+               LDR    	R4, [R1]
                MSR      PSP, R1
-
+			   BX       LR
 
 pushToPSP:
-               MRS    R1, PSP
+               MRS    	R1, PSP
                SUB      R1, #4
-               STR    R0, [R1]
+               STR    	R0, [R1]
                MSR      PSP, R1
                BX       LR
 
