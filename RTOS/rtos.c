@@ -390,30 +390,54 @@ void systickIsr()
 // REQUIRED: process UNRUN and READY tasks differently
 void pendSvIsr()
 {
-    uint8_t pid;
-
-    pid = 0;
-    char str[10];
-    putsUart0("PENDSV\n");
-    putsUart0("PID:");
-    selfIToA(pid, str, 10);
-    putsUart0(str);
-    putsUart0("\n");
-
+    /*
+}
+//    uint8_t pid;
+//
+//    pid = 0;
+//    char str[10];
+//    putsUart0("PENDSV\n");
+//    putsUart0("PID:");
+//    selfIToA(pid, str, 10);
+//    putsUart0(str);
+//    putsUart0("\n");
+//
+//    pushR4toR11();
+//    popR11toR4();
+//
+//
+//    pushToPSP(0x61000000);                  // xPSR
+//    pushToPSP(tcb[taskCurrent].pid);        //PC
+//    pushToPSP(0xFFFFFFF1);                  //LR
+//    pushToPSP(0x00000000);                  //R12
+//    pushToPSP(0x00000000);                  //R3
+//    pushToPSP(0x00000000);                  //R2
+//    pushToPSP(0x00000000);                  //R1
+//    pushToPSP(0x00000000);                  //R0
+    */
     pushR4toR11();
-    popR11toR4();
+    tcb[taskCurrent].sp=(uint32_t )getPSP();
+    taskCurrent = rtosScheduler();
 
 
-    pushToPSP(0x61000000);                  // xPSR
-    pushToPSP(tcb[taskCurrent].pid);        //PC
-    pushToPSP(0xFFFFFFF1);                  //LR
-    pushToPSP(0x00000000);                  //R12
-    pushToPSP(0x00000000);                  //R3
-    pushToPSP(0x00000000);                  //R2
-    pushToPSP(0x00000000);                  //R1
-    pushToPSP(0x00000000);                  //R0
-
-
+    if(tcb[taskCurrent].state == STATE_READY)
+    {
+        setPSP(tcb[taskCurrent].sp);
+        popR11toR4();
+    }
+    else if (tcb[taskCurrent].state == STATE_UNRUN)
+    {
+        tcb[taskCurrent].state = STATE_READY;
+        setPSP(tcb[taskCurrent].spInit);
+        pushToPSP((uint32_t) 0x61000000);
+        pushToPSP((uint32_t) tcb[taskCurrent].pid);
+        pushToPSP((uint32_t) 0xFFFFFFFD);
+        pushToPSP((uint32_t) 0x00000000);
+        pushToPSP((uint32_t) 0x00000000);
+        pushToPSP((uint32_t) 0x00000000);
+        pushToPSP((uint32_t) 0x00000000);
+        pushToPSP((uint32_t) 0x00000000);
+    }
 
 
 
@@ -742,6 +766,16 @@ void idle()
         yield();
     }
 }
+void idle2()
+{
+    while(true)
+    {
+        setPinValue(BLUE_LED, 1);
+        waitMicrosecond(1000);
+        setPinValue(BLUE_LED, 0);
+        yield();
+    }
+}
 
 void flash4Hz()
 {
@@ -1022,7 +1056,7 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok =  createThread(idle, "Idle", 7, 1024);
-
+    ok =  createThread(idle2, "Idle2", 7, 1024);
 //    // Add other processes
 //    ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
 //    ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
