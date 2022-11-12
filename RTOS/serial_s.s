@@ -113,29 +113,29 @@ getPSP:
 			   BX	  LR
 
 pushR4toR11:
-               MRS      R1,PSP
-               SUB      R1, #4
-               STR    	R4, [R1]
-               SUB      R1, #4
-               STR    	R5, [R1]
-               SUB      R1, #4
-               STR    	R6, [R1]
-               SUB      R1, #4
-               STR    	R7, [R1]
-               SUB      R1, #4
-               STR    	R8, [R1]
-               SUB      R1, #4
-               STR    	R9, [R1]
-               SUB      R1, #4
-               STR    	R10, [R1]
-               SUB      R1, #4
-               STR    	R11, [R1]
-               MSR      PSP, R1
-               BX		LR
+               MRS    R1,PSP
+               SUB    R1, #4
+               STR    R4, [R1]
+               SUB    R1, #4
+               STR    R5, [R1]
+               SUB    R1, #4
+               STR    R6, [R1]
+               SUB    R1, #4
+               STR    R7, [R1]
+               SUB    R1, #4
+               STR    R8, [R1]
+               SUB    R1, #4
+               STR    R9, [R1]
+               SUB    R1, #4
+               STR    R10, [R1]
+               SUB    R1, #4
+               STR    R11, [R1]
+               MSR    PSP, R1
+               BX	  LR
 
 popR11toR4:
 			   MRS      R1,PSP
-               ADD      R1, #4
+			   ADD		R1, #4
                LDR    	R11, [R1]
                ADD      R1, #4
                LDR    	R10, [R1]

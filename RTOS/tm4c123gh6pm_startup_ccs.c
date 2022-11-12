@@ -61,6 +61,7 @@ extern void usageFaultIsr(void);
 extern void hardFaultIsr(void);
 extern void pendSvIsr(void);
 extern void svCallIsr(void);
+extern void systickIsr(void);
 //*****************************************************************************
 //
 // The vector table.  Note that the proper constructs must be placed on this to
@@ -83,11 +84,11 @@ void (* const g_pfnVectors[])(void) =
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
-    svCallIsr,                      // SVCall handler
+    svCallIsr,                              // SVCall handler
     IntDefaultHandler,                      // Debug monitor handler
     0,                                      // Reserved
     pendSvIsr,                              // The PendSV handler
-    IntDefaultHandler,                      // The SysTick handler
+    systickIsr,                             // The SysTick handler
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
     IntDefaultHandler,                      // GPIO Port C

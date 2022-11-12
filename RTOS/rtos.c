@@ -80,6 +80,17 @@
 #define region4     0x00000004
 #define region5     0x00000005
 #define region6     0x00000006
+#define PCoffset    6
+#define Comoffset   1
+#define keyPressed  1
+#define keyReleased 2
+#define flashReq    3
+#define resource    4
+#define YIELD       6
+#define SLEEP       7
+#define WAIT        8
+#define POST        9
+
 
 //-----------------------------------------------------------------------------
 // Extern Functions
@@ -114,10 +125,6 @@ typedef struct _semaphore
 } semaphore;
 
 semaphore semaphores[MAX_SEMAPHORES];
-#define keyPressed 1
-#define keyReleased 2
-#define flashReq 3
-#define resource 4
 
 // task
 #define STATE_INVALID    0 // no task
@@ -142,7 +149,7 @@ struct _tcb
     void *sp;                      // current stack pointer
     int8_t priority;               // 0=highest to 7=lowest
     uint32_t ticks;                // ticks until sleep complete
-    uint32_t srd;                  // MPU subregion disable bits (one per 1 KiB)
+    uint32_t srd;                  // MPU subregion disable bits (one per 1 KiB) (sET TO 1 MEANS YOU CAN READ AND WRITE )
     char name[16];                 // name of task used in ps command
     void *semaphore;               // pointer to the semaphore that is blocking the thread
 } tcb[MAX_TASKS];
@@ -159,9 +166,7 @@ void * mallocFromHeap(uint32_t size_in_bytes)
     void * p = heap;
     if(!(size_in_bytes % 1024 == 0))
     {
-        size_in_bytes = size_in_bytes / 1024;
-        size_in_bytes ++;
-        size_in_bytes = size_in_bytes * 1024;
+        size_in_bytes = (((size_in_bytes + (1024 - 1 ))/1024) * 1024);
     }
     putsUart0("Heap Alocated From:\n0x");
     selfIToA(heap, str, 16);
@@ -382,39 +387,30 @@ void post(int8_t semaphore)
 
 // REQUIRED: modify this function to add support for the system timer
 // REQUIRED: in preemptive code, add code to request task switch
-void systickIsr()
+void systickIsr()//systic 39999 ticks N-1 (9C3F)
 {
+    uint16_t i, isZero;
+    for(i = 0; i <= 11; i++)
+    {
+        if(tcb[i].state == STATE_DELAYED)
+        {
+
+
+            tcb[i].ticks--;
+            if(tcb[i].ticks == 0)
+            {
+                tcb[i].state = STATE_READY;
+            }
+        }
+
+    }
 }
 
 // REQUIRED: in coop and preemptive, modify this function to add support for task switching
 // REQUIRED: process UNRUN and READY tasks differently
 void pendSvIsr()
 {
-    /*
-}
-//    uint8_t pid;
-//
-//    pid = 0;
-//    char str[10];
-//    putsUart0("PENDSV\n");
-//    putsUart0("PID:");
-//    selfIToA(pid, str, 10);
-//    putsUart0(str);
-//    putsUart0("\n");
-//
-//    pushR4toR11();
-//    popR11toR4();
-//
-//
-//    pushToPSP(0x61000000);                  // xPSR
-//    pushToPSP(tcb[taskCurrent].pid);        //PC
-//    pushToPSP(0xFFFFFFF1);                  //LR
-//    pushToPSP(0x00000000);                  //R12
-//    pushToPSP(0x00000000);                  //R3
-//    pushToPSP(0x00000000);                  //R2
-//    pushToPSP(0x00000000);                  //R1
-//    pushToPSP(0x00000000);                  //R0
-    */
+
     pushR4toR11();
     tcb[taskCurrent].sp=(uint32_t )getPSP();
     taskCurrent = rtosScheduler();
@@ -429,10 +425,10 @@ void pendSvIsr()
     {
         tcb[taskCurrent].state = STATE_READY;
         setPSP(tcb[taskCurrent].spInit);
-        pushToPSP((uint32_t) 0x61000000);
-        pushToPSP((uint32_t) tcb[taskCurrent].pid);
-        pushToPSP((uint32_t) 0xFFFFFFFD);
-        pushToPSP((uint32_t) 0x00000000);
+        pushToPSP((uint32_t) 0x61000000);            // xPSR
+        pushToPSP((uint32_t) tcb[taskCurrent].pid);  //PC
+        pushToPSP((uint32_t) 0xFFFFFFFD);            //LR
+        pushToPSP((uint32_t) 0x00000000);            //R12-0
         pushToPSP((uint32_t) 0x00000000);
         pushToPSP((uint32_t) 0x00000000);
         pushToPSP((uint32_t) 0x00000000);
@@ -455,12 +451,38 @@ void pendSvIsr()
 
 
 }
+uint8_t getSVCnum()
+{
+    uint32_t* PSP = (uint32_t*)getPSP();  //gets PSP mem location value
+    uint32_t* PC = *(PSP + PCoffset) ; //moves to PC mem location and dereferences the command that's in PC
+    uint16_t* SVC = *(((uint16_t*) PC) - Comoffset); //Moves up one command and dereferences to get the prev SVC  #__
+    uint8_t SVCnum= ((uint8_t)SVC); // Grabs only the value #__ saves to SVCnum
+    return SVCnum;
+}
 
 // REQUIRED: modify this function to add support for the service call
 // REQUIRED: in preemptive code, add code to handle synchronization primitives
 void svCallIsr()
 {
-    NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV; // resets the SV bit
+    uint8_t SVCnum= getSVCnum();
+    switch(SVCnum) // looks to see which SVC num is stored
+    {
+    case YIELD://num 6
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV; // resets the SV bit
+        break;
+    case SLEEP://num 7
+        tcb[taskCurrent].ticks = *((uint32_t*)getPSP());
+        tcb[taskCurrent].state = STATE_DELAYED;
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
+        break;
+    case WAIT://num 8
+
+        break;
+    case POST://num 9
+
+        break;
+    }
+
 }
 
 // REQUIRED: code this function
@@ -560,7 +582,7 @@ void hardFaultIsr()
 // REQUIRED: code this function
 void busFaultIsr()
 {
-    uint8_t pid , i;
+    uint8_t pid ;
     pid = 6;
     char str[10];
     selfIToA(pid, str, 10);
@@ -628,6 +650,10 @@ void initHw()
     enablePinPullup(PB3);
     enablePinPullup(PB4);
     enablePinPullup(PB5);
+
+
+    NVIC_ST_RELOAD_R = 0x9C3F; //39999
+    NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
 
 }
 
@@ -1059,7 +1085,7 @@ int main(void)
     ok =  createThread(idle2, "Idle2", 7, 1024);
 //    // Add other processes
 //    ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
-//    ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
+    ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
 //    ok &= createThread(oneshot, "OneShot", 2, 1024);
 //    ok &= createThread(readKeys, "ReadKeys", 6, 1024);
 //    ok &= createThread(debounce, "Debounce", 6, 1024);
