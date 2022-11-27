@@ -1,7 +1,7 @@
 // RTOS Framework - Fall 2022
 // J Losh
 
-// Student Name: Fernanda, Sworup Bhattarai
+// Student Name: Fernanda Villa, Sworup Bhattarai
 
 // TO DO: Add your name(s) on this line.
 //        Do not include your ID number(s) in the file.
@@ -90,6 +90,18 @@
 #define SLEEP       7
 #define WAIT        8
 #define POST        9
+#define REBOOT      10
+#define PS          11
+#define IPCS        12
+#define KILL        13
+#define PMAP        14
+#define PREEMPT     15
+#define SCHED       16
+#define PIDOF       17
+#define RUN         18
+#define KBHIT       19
+#define MALLOC      5
+#define MiliSec     0x9C3F
 
 
 //-----------------------------------------------------------------------------
@@ -117,6 +129,7 @@ typedef void (*_fn)();
 // semaphore
 #define MAX_SEMAPHORES 5
 #define MAX_QUEUE_SIZE 5
+
 typedef struct _semaphore
 {
     uint16_t count;
@@ -132,11 +145,16 @@ semaphore semaphores[MAX_SEMAPHORES];
 #define STATE_READY      2 // has run, can resume at any time
 #define STATE_DELAYED    3 // has run, but now awaiting timer
 #define STATE_BLOCKED    4 // has run, but now blocked by semaphore
+#define STATE_STOPPED    5
 
 #define MAX_TASKS 12       // maximum number of valid tasks
 uint8_t taskCurrent = 0;   // index of last dispatched task
 uint8_t taskCount = 0;     // total number of valid tasks
 uint32_t  *heap = ( uint32_t *)0x20001000;
+uint32_t prioLastRun[7];
+uint8_t sched = 0;
+uint16_t preemptOnOff = 0;
+uint32_t numSwitch = 0;
 
 // REQUIRED: add store and management for the memory used by the thread stacks
 //           thread stacks must start on 1 kiB boundaries so mpu can work correctly
@@ -160,7 +178,7 @@ struct _tcb
 //-----------------------------------------------------------------------------
 
 // TODO: add your malloc code here and update the SRD bits for the current thread
-void * mallocFromHeap(uint32_t size_in_bytes)
+void* mallocFromHeap(uint32_t size_in_bytes)
 {
     char str[50];
     void * p = heap;
@@ -264,22 +282,249 @@ void initRtos()
         tcb[i].state = STATE_INVALID;
         tcb[i].pid = 0;
     }
+
 }
 
 // REQUIRED: Implement prioritization to 8 levels
 int rtosScheduler()
 {
-    bool ok;
-    static uint8_t task = 0xFF;
-    ok = false;
-    while (!ok)
+    if(sched == 1)
     {
-        task++;
-        if (task >= MAX_TASKS)
-            task = 0;
-        ok = (tcb[task].state == STATE_READY || tcb[task].state == STATE_UNRUN);
+
+        uint8_t i = 0;
+        uint8_t ready = 0;
+        uint8_t oncethrough = 0;
+
+        //PRIO0
+        i = prioLastRun[0]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 0) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[0] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+
+        //PRIO1
+        i = prioLastRun[1]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 1) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[1] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO2
+        i = prioLastRun[2]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 2) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[2] = (i % MAX_TASKS);
+                       return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO3
+        i = prioLastRun[3]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 3) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[3] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO4
+        i = prioLastRun[4]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 4) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[4] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO5
+        i = prioLastRun[5]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 5) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[5] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO6
+        i = prioLastRun[6]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 6) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[6] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
+
+
+        //PRIO7
+        i = prioLastRun[7]; // sets i to be the last run command for that prio, e.g. prio 0 last ran tcb 3
+        while(ready != 1)
+        {
+
+            if(oncethrough >= 1) // looks to see if the value id grater than the last run thing
+            {
+                if(tcb[i % MAX_TASKS].priority == 7) //is it the same prio
+                {
+                    if(tcb[(i % MAX_TASKS)].state == STATE_READY || tcb[(i % MAX_TASKS)].state == STATE_UNRUN) // is it ready/unrun
+                    {
+                        prioLastRun[7] = (i % MAX_TASKS);
+                        return (i % MAX_TASKS);
+                    }
+                }
+            }
+            oncethrough++;
+            i++;
+            if(i >= 24) // i aint found nada(looped twice)
+            {
+                oncethrough = 0;
+
+                break; // onto next prio
+            }
+        }
     }
-    return task;
+    if(sched == 0)
+    {
+
+        bool ok;
+        static uint8_t task = 0xFF;
+        ok = false;
+        while (!ok)
+        {
+            task++;
+            if (task >= MAX_TASKS)
+                task = 0;
+            ok = (tcb[task].state == STATE_READY || tcb[task].state == STATE_UNRUN);
+        }
+        return task;
+    }
 }
 
 bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackBytes)
@@ -322,6 +567,15 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
 // REQUIRED: modify this function to restart a thread
 void restartThread(_fn fn)
 {
+    uint8_t i, j,p;
+        for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+        {
+            if(tcb[i].pid == fn)
+            {
+                tcb[i].sp =  tcb[i].spInit;
+                tcb[i].state = STATE_UNRUN;
+            }
+        }
 }
 
 // REQUIRED: modify this function to stop a thread
@@ -329,6 +583,31 @@ void restartThread(_fn fn)
 // NOTE: see notes in class for strategies on whether stack is freed or not
 void stopThread(_fn fn)
 {
+    uint8_t i, j,p;
+    for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+    {
+        if(tcb[i].pid == fn)
+        {
+            if(tcb[i].state == STATE_BLOCKED)
+            {
+                for(j = 0; j < MAX_SEMAPHORES; j++)
+                {
+                    if(semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] == tcb[i].pid)
+                    {
+                        semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[j + 1];
+                        for(p = j; p < MAX_SEMAPHORES; p++ )
+                        {
+                            semaphores[(uint16_t)tcb[i].semaphore].processQueue[p] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[p + 1];
+                        }
+
+
+                    }
+                }
+            }
+            tcb[i].state = STATE_STOPPED;
+            tcb[i].semaphore = 0;
+        }
+    }
 }
 
 // REQUIRED: modify this function to set a thread priority
@@ -350,7 +629,11 @@ bool createSemaphore(uint8_t semaphore, uint8_t count)
 // by calling scheduler, setting PSP, ASP bit, TMPL bit, and PC
 void startRtos()
 {
+    NVIC_ST_RELOAD_R = MiliSec; //39999
+    NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
+
     taskCurrent = rtosScheduler(); //saves the task ID in taskCurrent to be reused later
+    tcb[taskCurrent].state = STATE_READY;
     setPSP(tcb[taskCurrent].sp);
     //call a function to do the fn and set the tmpl
     _fn fn = (_fn)tcb[taskCurrent].pid; //sets the location of idle's fuction to fn
@@ -385,24 +668,77 @@ void post(int8_t semaphore)
     __asm("     SVC     #9");
 }
 
+void* mallocc(int32_t size)
+{
+    __asm("     SVC     #5");
+}
+
+void reboot()
+{
+    __asm("     SVC     #10");
+}
+
+void* ps()
+{
+    __asm("     SVC     #11");
+}
+void* ipcs()
+{
+    __asm("     SVC     #12");
+}
+void* kill(uint32_t pid)
+{
+    __asm("     SVC     #13");
+}
+
+void* pmap(uint32_t pid)
+{
+    __asm("     SVC     #14");
+}
+void* preempt(uint16_t offon)
+{
+    __asm("     SVC     #15");
+}
+
+void* schedlr(uint8_t num)
+{
+    __asm("     SVC     #16");
+}
+
+void* pidof(const char name[])
+{
+    __asm("     SVC     #17");
+}
+
+void run(uint32_t pid)
+{
+    __asm("     SVC     #18");
+}
+void* kbhit()
+{
+    __asm("     SVC     #19");
+}
+
+
 // REQUIRED: modify this function to add support for the system timer
 // REQUIRED: in preemptive code, add code to request task switch
 void systickIsr()//systic 39999 ticks N-1 (9C3F)
 {
-    uint16_t i, isZero;
-    for(i = 0; i <= 11; i++)
+    uint16_t i;
+    for(i = 0; i < MAX_TASKS; i++)
     {
         if(tcb[i].state == STATE_DELAYED)
         {
-
-
             tcb[i].ticks--;
             if(tcb[i].ticks == 0)
             {
                 tcb[i].state = STATE_READY;
             }
         }
-
+    }
+    if(preemptOnOff == 1)
+    {
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
     }
 }
 
@@ -454,9 +790,9 @@ void pendSvIsr()
 uint8_t getSVCnum()
 {
     uint32_t* PSP = (uint32_t*)getPSP();  //gets PSP mem location value
-    uint32_t* PC = *(PSP + PCoffset) ; //moves to PC mem location and dereferences the command that's in PC
-    uint16_t* SVC = *(((uint16_t*) PC) - Comoffset); //Moves up one command and dereferences to get the prev SVC  #__
-    uint8_t SVCnum= ((uint8_t)SVC); // Grabs only the value #__ saves to SVCnum
+    uint32_t* PC = (uint32_t*)*(PSP + PCoffset) ; //moves to PC mem location and dereferences the command that's in PC
+    uint16_t* SVC = (uint16_t*)*(((uint16_t*) PC) - Comoffset);  //Moves up one command and dereferences to get the prev SVC  #__
+    uint8_t SVCnum= (uint8_t)SVC; // Grabs only the value #__ saves to SVCnum
     return SVCnum;
 }
 
@@ -464,23 +800,214 @@ uint8_t getSVCnum()
 // REQUIRED: in preemptive code, add code to handle synchronization primitives
 void svCallIsr()
 {
-    uint8_t SVCnum= getSVCnum();
+    numSwitch++;
+    uint8_t i;
+    uint32_t * psp = *((uint32_t*)getPSP());
+    uint8_t SVCnum = getSVCnum();
+    uint32_t getrzero = *((uint32_t*)getPSP());
     switch(SVCnum) // looks to see which SVC num is stored
     {
     case YIELD://num 6
+    {
         NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV; // resets the SV bit
         break;
+    }
     case SLEEP://num 7
+    {
         tcb[taskCurrent].ticks = *((uint32_t*)getPSP());
+
         tcb[taskCurrent].state = STATE_DELAYED;
+
         NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
         break;
+    }
     case WAIT://num 8
+    {
+        getrzero = *((uint32_t*)getPSP());
+        if(semaphores[getrzero].count > 0)
+        {
+            semaphores[getrzero].count--;
+        }
+        else if(semaphores[getrzero].count == 0 )
+        {
 
+            semaphores[getrzero].processQueue[semaphores[getrzero].queueSize]  = (uint32_t) tcb[taskCurrent].pid;
+            semaphores[getrzero].queueSize++;
+            tcb[taskCurrent].state = STATE_BLOCKED;
+            tcb[taskCurrent].semaphore == (uint32_t)getrzero;
+        }
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
         break;
+    }
     case POST://num 9
+    {
+        getrzero = *((uint32_t*)getPSP());
+        semaphores[getrzero].count++;
+        if(semaphores[getrzero].queueSize > 0)
+        {
+            for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+            {
+                if(tcb[i].pid == semaphores[getrzero].processQueue[0])
+                {
+                    tcb[i].state = STATE_READY;
+                    tcb[i].semaphore = 0;
+                }
+            }
+            for(i = 0; i < MAX_QUEUE_SIZE - 1; i++) // moves everyone up the queue
+            {
+                semaphores[getrzero].processQueue[i] = semaphores[getrzero].processQueue[i + 1];
+                semaphores[getrzero].processQueue[i + 1] = 0;
+            }
+            semaphores[getrzero].count--;
+            semaphores[getrzero].queueSize--;
+        }
+        NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
+        break;
+    }
+    case MALLOC:
+    {
+        uint32_t psp = *((uint32_t*)getPSP());
+        void* size = (uint32_t*)mallocFromHeap(psp);
+
+        uint32_t* psp2= ((uint32_t *)getPSP());
+        *psp2 = (uint32_t)size;
+        break;
+    }
+    case REBOOT:  //done
+    {
+        NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
+        break;
+    }
+    case PS:
+    {
 
         break;
+    }
+    case IPCS:
+    {
+        char str[10];
+        putsUart0("Semaphore Information:\nName\t\tCount\tQueue_Size\tQueue\n");
+        uint8_t i;
+
+        putsUart0("KeyPressed\t");
+        selfIToA(semaphores[1].count,str,10);
+        putsUart0(str);
+        putsUart0("\t");
+        selfIToA(semaphores[1].queueSize,str,10);
+        putsUart0(str);
+        putsUart0("\t\t[ ");
+        for(i = 0; i < MAX_QUEUE_SIZE; i++)
+        {
+            putsUart0("0x0000");
+            selfIToA(semaphores[1].processQueue[i],str,16);
+            putsUart0(str);
+            putsUart0(" ");
+        }
+        putsUart0("]\n");
+
+
+        putsUart0("KeyReleaced\t");
+        selfIToA(semaphores[2].count,str,10);
+        putsUart0(str);
+        putsUart0("\t");
+        selfIToA(semaphores[2].queueSize,str,10);
+        putsUart0(str);
+        putsUart0("\t\t[ ");
+        for(i = 0; i < MAX_QUEUE_SIZE; i++)
+        {
+            putsUart0("0x0000");
+            selfIToA(semaphores[2].processQueue[i],str,16);
+            putsUart0(str);
+            putsUart0(" ");
+        }
+        putsUart0("]\n");
+
+        putsUart0("FlashReq\t");
+        selfIToA(semaphores[3].count,str,10);
+        putsUart0(str);
+        putsUart0("\t");
+        selfIToA(semaphores[3].queueSize,str,10);
+        putsUart0(str);
+        putsUart0("\t\t[ ");
+        for(i = 0; i < MAX_QUEUE_SIZE; i++)
+        {
+            putsUart0("0x0000");
+            selfIToA(semaphores[3].processQueue[i],str,16);
+            putsUart0(str);
+            putsUart0(" ");
+        }
+        putsUart0("]\n");
+
+
+        putsUart0("Resource\t");
+        selfIToA(semaphores[4].count,str,10);
+        putsUart0(str);
+        putsUart0("\t");
+        selfIToA(semaphores[4].queueSize,str,10);
+        putsUart0(str);
+        putsUart0("\t\t[ ");
+        for(i = 0; i < MAX_QUEUE_SIZE; i++)
+        {
+            putsUart0("0x0000");
+            selfIToA(semaphores[4].processQueue[i],str,16);
+            putsUart0(str);
+            putsUart0(" ");
+        }
+        putsUart0("]\n");
+        break;
+    }
+    case KILL:
+    {
+        uint32_t* psp = (uint32_t*  )*((uint32_t*)getPSP());
+        stopThread((_fn)psp);
+        break;
+
+    }
+    case PMAP:
+    {
+        uint32_t pid = *((uint32_t*)getPSP());
+        break;
+    }
+    case PREEMPT: // done
+    {
+        uint16_t offon = *((uint32_t*)getPSP());
+        preemptOnOff = offon;
+        break;
+    }
+    case SCHED:  //done
+    {
+        uint8_t prio = *((uint32_t*)getPSP());
+        sched = prio;
+        break;
+    }
+    case PIDOF:  //done
+    {
+        uint8_t scomp;
+        char* process = *((uint32_t*)getPSP());
+        for(i = 0; i < MAX_TASKS ; i++)
+        {
+            scomp = strCmp(tcb[i].name, process);
+
+            if(scomp == 0)
+            {
+                uint32_t* psp2= ((uint32_t *)getPSP());
+                *psp2 = tcb[i].pid;
+            }
+        }
+        break;
+    }
+    case RUN:
+    {
+        uint32_t pid = *((uint32_t*)getPSP());
+        restartThread((_fn) pid);
+        break;
+    }
+    case KBHIT:
+    {
+        uint32_t* psp2= ((uint32_t *)getPSP());
+        *psp2 = kbhitUart0();
+        break;
+    }
     }
 
 }
@@ -522,7 +1049,6 @@ void mpuFaultIsr()
     NVIC_SYS_HND_CTRL_R &= ~NVIC_SYS_HND_CTRL_MEMP;  //MPU Fault clear
     NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;   // pendSV trigger
 
-    while(true){}
 }
 
 // REQUIRED: code this function
@@ -598,9 +1124,10 @@ void busFaultIsr()
 // REQUIRED: code this function
 void usageFaultIsr()
 {
-    uint8_t pid;
-    pid = 0;
+    uint32_t pid;
+
     char str[10];
+    pid = *((uint32_t*)getPSP());
     putsUart0("USAGE FAULT!\n");
     putsUart0("PID:");
     selfIToA(pid, str, 10);
@@ -652,8 +1179,6 @@ void initHw()
     enablePinPullup(PB5);
 
 
-    NVIC_ST_RELOAD_R = 0x9C3F; //39999
-    NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
 
 }
 
@@ -694,6 +1219,51 @@ uint8_t readPbs()
 // REQUIRED: add any custom code in this space
 //-----------------------------------------------------------------------------
 
+
+
+
+//-----------------------------------------------------------------------------
+// setSramAccessWindow
+//-----------------------------------------------------------------------------
+void setSramAccessWindow(uint32_t baseAdd, uint32_t size_in_bytes)
+{
+
+    uint16_t startSubregion = (baseAdd - 0x20000000) / 0x2000;
+    if(!(size_in_bytes % 1024 == 0))
+    {
+        size_in_bytes = size_in_bytes / 1024;
+        size_in_bytes++;
+        size_in_bytes = size_in_bytes * 1024;
+    }
+    uint16_t regNum = size_in_bytes / 0x400;
+    uint8_t i = 0;
+
+    uint32_t mask = 0;
+
+    while(i < regNum)
+    {
+        mask |= (1 <<  i);
+        i++;
+    }
+
+    mask <<= startSubregion * 8;
+
+    NVIC_MPU_NUMBER_R = 3;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 5;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 6;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+}
 
 //-----------------------------------------------------------------------------
 // stringCopy
@@ -792,16 +1362,16 @@ void idle()
         yield();
     }
 }
-void idle2()
-{
-    while(true)
-    {
-        setPinValue(BLUE_LED, 1);
-        waitMicrosecond(1000);
-        setPinValue(BLUE_LED, 0);
-        yield();
-    }
-}
+//void idle2()
+//{
+//    while(true)
+//    {
+//        setPinValue(RED_LED, 1);
+//        waitMicrosecond(1000);
+//        setPinValue(RED_LED, 0);
+//        yield();
+//    }
+//}
 
 void flash4Hz()
 {
@@ -838,7 +1408,7 @@ void lengthyFn()
 
     // Example of allocating memory from stack
     // This will show up in the pmap command for this thread
-    p = mallocFromHeap(1024);
+    p = mallocc(1024);
     *p = 0;
 
     while(true)
@@ -950,105 +1520,122 @@ void important()
 // REQUIRED: add processing for the shell commands through the UART here
 void shell()
 {
-//    USER_DATA data;
-//    bool valid;
-//    while (true)
-//    {
-//        valid = false;
-//
-//        // Get the string from the user
-//        getsUart0(&data);
-//        lowercase(&data);
-//        //putsUart0("Invalid command \0");
-//
-//        // Parse fields
-//        parseFields(&data);
-//
-//        if (isCommand(&data, "preempt", 1))
-//        {
-//            char* str = getFieldString(&data, 1);
-//
-//            if(strCmp(str, "on") == 0)
-//            {
-//                preempt(1);
-//                valid = true;
-//            }
-//            else if(strCmp(str, "off") == 0)
-//            {
-//                preempt(0);
-//                valid = true;
-//            }
-//        }
-//        if (isCommand(&data, "reboot", 0))
-//        {
-//            valid = true;
-//            putsUart0("REBOOTING......");
-//            putcUart0('\n');
-//            reboot();
-//            // APINT
-//        }
-//        if (isCommand(&data, "ps", 0))
-//        {
-//            valid = true;
-//            ps();
-//        }
-//        if (isCommand(&data, "ipcs", 0))
-//        {
-//            valid = true;
-//            ipcs();
-//        }
-//        if (isCommand(&data, "kill", 1))
-//        {
-//            int pidint;
-//            char* pid = getFieldString(&data, 1);
-//            valid = true;
-//            pidint = selfAtoi(pid);
-//            kill(pidint);
-//        }
-//        if (isCommand(&data, "pmap", 1))
-//        {
-//            int pidint;
-//            char* pid = getFieldString(&data, 1);
-//
-//            pidint = selfAtoi(pid);
-//            pmap(pidint);
-//            valid = true;
-//        }
-//        if (isCommand(&data, "sched", 1))
-//        {
-//            char* str = getFieldString(&data, 1);
-//
-//            if(strCmp(str, "prio") == 0)
-//            {
-//                sched(1);
-//                valid = true;
-//            }
-//            else if(strCmp(str, "rr") == 0)
-//            {
-//                sched(0);
-//                valid = true;
-//            }
-//        }
-//
-//        if (isCommand(&data, "pidof", 1))
-//        {
-//
-//            char* pid = getFieldString(&data, 1);
-//            valid = true;
-//            pidof(pid);
-//        }
-//        if (isCommand(&data, "run", 1))
-//        {
-//
-//            char* pid = getFieldString(&data, 1);
-//            valid = true;
-//            setPinValue(RED_LED, 1);
-//        }
-//        // Look for error
-//        if (!valid)
-//            putsUart0("Invalid command\n");
-//
-//    }
+    yield();
+    USER_DATA data;
+    bool valid;
+    char str[15];
+    while (true)
+    {
+        yield();
+        valid = false;
+
+        // Get the string from the user
+        getsUart0(&data);
+        lowercase(&data);
+        //putsUart0("Invalid command \0");
+
+        // Parse fields
+        parseFields(&data);
+
+        if (isCommand(&data, "preempt", 1))
+        {
+            char* str = getFieldString(&data, 1);
+
+            if(strCmp(str, "on") == 0)
+            {
+                preempt(1);
+                valid = true;
+            }
+            else if(strCmp(str, "off") == 0)
+            {
+                preempt(0);
+                valid = true;
+            }
+        }
+        else if (isCommand(&data, "reboot", 0))
+        {
+            valid = true;
+            putsUart0("REBOOTING......");
+            putcUart0('\n');
+            reboot();
+            // APINT
+        }
+        else if (isCommand(&data, "ps", 0))
+        {
+            valid = true;
+            ps();
+        }
+        else if (isCommand(&data, "ipcs", 0))
+        {
+            valid = true;
+            ipcs();
+        }
+        else if (isCommand(&data, "kill", 1))
+        {
+            uint32_t* pidint;
+            char* pid = getFieldString(&data, 1);
+
+            valid = true;
+            pidint = (uint32_t*)hex2int(pid);
+            kill(pidint);
+        }
+        else if (isCommand(&data, "pmap", 1))
+        {
+            int pidint;
+            char* pid = getFieldString(&data, 1);
+
+            pidint = selfAtoi(pid);
+            pmap(pidint);
+            valid = true;
+        }
+        else if (isCommand(&data, "sched", 1))
+        {
+            char* str = getFieldString(&data, 1);
+
+            if(strCmp(str, "prio") == 0)
+            {
+                schedlr(1);
+                valid = true;
+            }
+            else if(strCmp(str, "rr") == 0)
+            {
+                schedlr(0);
+                valid = true;
+            }
+        }
+
+        else if (isCommand(&data, "pidof", 1))
+        {
+
+            char* pid = getFieldString(&data, 1);
+            uint32_t name;
+            valid = true;
+            name = (uint32_t)pidof(pid);
+            selfIToA(name, str, 16);
+            putsUart0("Process ID of ");
+            putsUart0(pid);
+            putsUart0(" is: 0x0000");
+            putsUart0(str);
+            putsUart0("\n");
+        }
+        else if (isCommand(&data, "run", 1))
+        {
+
+            char* pid = getFieldString(&data, 1);
+            uint32_t name;
+            valid = true;
+            name = (uint32_t)pidof(pid);
+            run(name);
+
+        }
+        // Look for error
+        if (!valid)
+        {
+            putsUart0("Invalid command\n");
+        }
+
+    }
+
 }
 
 //-----------------------------------------------------------------------------
@@ -1081,18 +1668,18 @@ int main(void)
     createSemaphore(resource, 1);
 
     // Add required idle process at lowest priority
-    ok =  createThread(idle, "Idle", 7, 1024);
-    ok =  createThread(idle2, "Idle2", 7, 1024);
+    ok =  createThread(idle, "idle", 7, 1024);
+//    ok =  createThread(idle2, "Idle2", 7, 1024);
 //    // Add other processes
-//    ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
-    ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
-//    ok &= createThread(oneshot, "OneShot", 2, 1024);
-//    ok &= createThread(readKeys, "ReadKeys", 6, 1024);
-//    ok &= createThread(debounce, "Debounce", 6, 1024);
-//    ok &= createThread(important, "Important", 0, 1024);
-//    ok &= createThread(uncooperative, "Uncoop", 6, 1024);
-//    ok &= createThread(errant, "Errant", 6, 1024);
-//    ok &= createThread(shell, "Shell", 6, 2048);
+    ok &= createThread(lengthyFn, "lengthyfn", 6, 1024);
+    ok &= createThread(flash4Hz, "flash4hz", 4, 1024);
+    ok &= createThread(oneshot, "oneshot", 2, 1024);
+    ok &= createThread(readKeys, "readkeys", 6, 1024);
+    ok &= createThread(debounce, "debounce", 6, 1024);
+    ok &= createThread(important, "important", 0, 1024);
+//    ok &= createThread(uncooperative, "uncoop", 6, 1024);
+//    ok &= createThread(errant, "errant", 6, 1024);
+    ok &= createThread(shell, "shell", 6, 2048);
 
     // Start up RTOS
     if (ok)

@@ -34,6 +34,7 @@ int strCmp(const char* s1, const char* s2);
 int32_t getFieldInteger(USER_DATA* d, uint8_t fieldNumber);
 bool isCommand(USER_DATA* d, const char* strCommand, uint8_t minArguments);
 void lowercase(USER_DATA* d);
+uint32_t hex2int(char *hex);
 
 
 

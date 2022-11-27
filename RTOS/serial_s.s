@@ -76,6 +76,7 @@ donePutsUart:  POP    {R4, PC}               ; pop off R4, pop off return addres
 ; Blocking function that returns with serial data once the buffer is not empty
 ; char getcUart0(void), return character in R0
 getcUart0:
+			   SVC    #6
                LDR    R0, UART0_FR_R         ; get pointer to UART0 FR register
                LDR    R0, [R0]               ; read FR
                AND    R0, R0, #0x10          ; mask off all but bit 4 (RX empty)

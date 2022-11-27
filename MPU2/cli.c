@@ -33,6 +33,13 @@
 #define region5  0x00000005
 #define region6  0x00000006
 
+#define REGION_3  0x00000003
+#define REGION_4  0x00000004
+#define REGION_5  0x00000005
+#define REGION_6  0x00000006
+
+
+
 
 extern setTMPLbit();
 extern setASPbit();
@@ -75,7 +82,8 @@ char* reverse(char *buf, uint16_t i, uint16_t j)
 char* selfIToA(uint32_t value, char* buffer, uint16_t base)
 {
 
-    if (base < 2 || base > 32) {
+    if (base < 2 || base > 32)
+    {
         return buffer;
     }
     uint32_t n = value;
@@ -83,21 +91,25 @@ char* selfIToA(uint32_t value, char* buffer, uint16_t base)
     while (n)
     {
         uint32_t r = n % base;
-        if (r >= 10) {
+        if (r >= 10)
+        {
             buffer[i++] = 65 + (r - 10);
         }
-        else {
+        else
+        {
             buffer[i++] = 48 + r;
         }
         n = n / base;
     }
 
     // if the number is 0
-    if (i == 0) {
+    if (i == 0)
+    {
         buffer[i++] = '0';
     }
 
-    if (value < 0 && base == 10) {
+    if (value < 0 && base == 10)
+    {
         buffer[i++] = '-';
     }
     buffer[i] = '\0'; // null terminate string
@@ -454,44 +466,40 @@ void setupSramAccess(void)
 
 }
 
-void setSramAccessWindow(uint32_t baseAdd, uint32_t size_in_bytes)
-{
+void setSramAccessWindow(uint32_t baseAdd, uint32_t size_in_bytes) {
 
-    uint16_t startSubregion = (baseAdd - 0x20000000) / 0x2000;
-    if(!(size_in_bytes % 1024 == 0))
-    {
-        size_in_bytes = size_in_bytes / 1024;
-        size_in_bytes++;
-        size_in_bytes = size_in_bytes * 1024;
-    }
-    uint16_t regNum = size_in_bytes / 0x400;
+    uint32_t regionInWhichSrdBitsShouldBeSet = (baseAdd - 0x20000000) / 1024;
+//    uint32_t subRegionPos = local_ceil((float) (baseAdd - 0x20000000) / 1024);
+    uint32_t srd = local_ceil((float)size_in_bytes/1024);
     uint8_t i = 0;
 
-    uint32_t mask = 0;
-
-    while(i < regNum)
+    uint32_t srdRegionMask = 0;
+    for (i = 0; i < srd; i++)
     {
-        mask |= (1 <<  i);
-        i++;
+        srdRegionMask |= (1 << i);
     }
 
-    mask <<= startSubregion * 8;
+    // 00000000 00000000 00000000 00000011
+    // Offset byte 8 times the region number where the region is 0 based
+    srdRegionMask <<= (regionInWhichSrdBitsShouldBeSet * 8);
+    srdRegionMask <<= regionInWhichSrdBitsShouldBeSet;
+//    srdRegionMask <<= subRegionPos;69
 
-    NVIC_MPU_NUMBER_R = 3;
-    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
-    NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+    NVIC_MPU_NUMBER_R = REGION_3;
+    NVIC_MPU_ATTR_R &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= (srdRegionMask & 0xFF) << 8;
 
-    NVIC_MPU_NUMBER_R = 4;
-    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
-    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+    NVIC_MPU_NUMBER_R = REGION_4;
+    NVIC_MPU_ATTR_R &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((srdRegionMask >> 8) & 0xFF) << 8;
 
-    NVIC_MPU_NUMBER_R = 5;
-    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
-    NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+    NVIC_MPU_NUMBER_R = REGION_5;
+    NVIC_MPU_ATTR_R &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((srdRegionMask >> 16) & 0xFF) << 8;
 
-    NVIC_MPU_NUMBER_R = 6;
-    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
-    NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+    NVIC_MPU_NUMBER_R = REGION_6;
+    NVIC_MPU_ATTR_R &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((srdRegionMask >> 24) & 0xFF) << 8;
 }
 
 void enableMPU()
