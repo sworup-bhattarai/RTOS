@@ -965,8 +965,30 @@ void svCallIsr()
     }
     case PMAP:
     {
-        uint32_t pid = *((uint32_t*)getPSP());
-        break;
+        char str[10];
+        putsUart0("Memory Information:\nName\t\tAddress\t\tStack/Heap Size\n");
+        uint32_t* psp = (uint32_t*  )*((uint32_t*)getPSP());
+        uint32_t dif ,pidint;
+        for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+        {
+           if(tcb[i].pid == psp)
+           {
+               putsUart0(tcb[i].name);
+               putsUart0("\t");
+               putsUart0("0x");
+               selfIToA(tcb[i].spInit,str,16);
+               putsUart0(str);
+               putsUart0("\t");
+               dif =  tcb[i].spInit - tcb[i].sp;
+               dif = hex2int((char *)dif);
+               dif = (dif * 32)/8 ;// # of bits = (dif * 32 bytes/block)/ 8 bytes/bit
+               selfIToA(dif,str,10);
+               putsUart0(str);
+               putsUart0("Bits\n");
+
+           }
+        }
+        break;//sub sp and spinit
     }
     case PREEMPT: // done
     {
@@ -1584,7 +1606,7 @@ void shell()
             int pidint;
             char* pid = getFieldString(&data, 1);
 
-            pidint = selfAtoi(pid);
+            pidint = (uint32_t*)hex2int(pid);
             pmap(pidint);
             valid = true;
         }
@@ -1677,8 +1699,8 @@ int main(void)
     ok &= createThread(readKeys, "readkeys", 6, 1024);
     ok &= createThread(debounce, "debounce", 6, 1024);
     ok &= createThread(important, "important", 0, 1024);
-//    ok &= createThread(uncooperative, "uncoop", 6, 1024);
-//    ok &= createThread(errant, "errant", 6, 1024);
+    ok &= createThread(uncooperative, "uncoop", 6, 1024);
+    ok &= createThread(errant, "errant", 6, 1024);
     ok &= createThread(shell, "shell", 6, 2048);
 
     // Start up RTOS
