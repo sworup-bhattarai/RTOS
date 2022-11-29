@@ -226,7 +226,7 @@ void lowercase(USER_DATA* d)
 
 }
 
-uint32_t hex2int(char *hex)// based on code from https://stackoverflow.com/questions/10156409/convert-hex-string-char-to-int
+uint32_t hex2int(char *hex) //based on code from https://stackoverflow.com/questions/10156409/convert-hex-string-char-to-int
 {
     uint32_t val = 0;
     while (*hex)

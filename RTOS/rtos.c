@@ -139,6 +139,21 @@ typedef struct _semaphore
 
 semaphore semaphores[MAX_SEMAPHORES];
 
+typedef struct _semaphore2
+{
+    char name[15];
+    uint16_t count;
+    uint16_t queueSize;
+    uint32_t processQueue[MAX_QUEUE_SIZE]; // store task index here
+} semaphore2;
+
+typedef struct _memorymap
+{
+    char name[15];
+    uint32_t spInit;
+    uint32_t sp;
+} memmap;
+
 // task
 #define STATE_INVALID    0 // no task
 #define STATE_UNRUN      1 // task has never been run
@@ -152,8 +167,8 @@ uint8_t taskCurrent = 0;   // index of last dispatched task
 uint8_t taskCount = 0;     // total number of valid tasks
 uint32_t  *heap = ( uint32_t *)0x20001000;
 uint32_t prioLastRun[7];
-uint8_t sched = 0;
-uint16_t preemptOnOff = 0;
+uint8_t sched = 1;
+uint16_t preemptOnOff = 1;
 uint32_t numSwitch = 0;
 
 // REQUIRED: add store and management for the memory used by the thread stacks
@@ -186,19 +201,19 @@ void* mallocFromHeap(uint32_t size_in_bytes)
     {
         size_in_bytes = (((size_in_bytes + (1024 - 1 ))/1024) * 1024);
     }
-    putsUart0("Heap Alocated From:\n0x");
-    selfIToA(heap, str, 16);
-    putsUart0(str);
-    putsUart0("\n");
+//    putsUart0("Heap Alocated From:\n0x");
+//    selfIToA(heap, str, 16);
+//    putsUart0(str);
+//    putsUart0("\n");
 
     heap = heap + size_in_bytes/4;
     if(heap > (0x20007FFF))
          p = NULL;
 
-    putsUart0("Heap Alocated To:\n0x");
-    selfIToA(heap, str, 16);
-    putsUart0(str);
-    putsUart0("\n\n\n");
+//    putsUart0("Heap Alocated To:\n0x");
+//    selfIToA(heap, str, 16);
+//    putsUart0(str);
+//    putsUart0("\n\n\n");
     return p;
 
 }
@@ -604,6 +619,7 @@ void stopThread(_fn fn)
                     }
                 }
             }
+            semaphores[(uint16_t)tcb[i].semaphore].count--;
             tcb[i].state = STATE_STOPPED;
             tcb[i].semaphore = 0;
         }
@@ -613,6 +629,15 @@ void stopThread(_fn fn)
 // REQUIRED: modify this function to set a thread priority
 void setThreadPriority(_fn fn, uint8_t priority)
 {
+    uint8_t i, j,p;
+       for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+       {
+           if(tcb[i].pid == fn)
+           {
+               tcb[i].priority = priority;
+           }
+       }
+
 }
 
 bool createSemaphore(uint8_t semaphore, uint8_t count)
@@ -682,7 +707,7 @@ void* ps()
 {
     __asm("     SVC     #11");
 }
-void* ipcs()
+void ipcs(semaphore2* sem)
 {
     __asm("     SVC     #12");
 }
@@ -691,7 +716,7 @@ void* kill(uint32_t pid)
     __asm("     SVC     #13");
 }
 
-void* pmap(uint32_t pid)
+void* pmap(uint32_t pid, memmap* memap)
 {
     __asm("     SVC     #14");
 }
@@ -885,75 +910,8 @@ void svCallIsr()
     }
     case IPCS:
     {
-        char str[10];
-        putsUart0("Semaphore Information:\nName\t\tCount\tQueue_Size\tQueue\n");
-        uint8_t i;
-
-        putsUart0("KeyPressed\t");
-        selfIToA(semaphores[1].count,str,10);
-        putsUart0(str);
-        putsUart0("\t");
-        selfIToA(semaphores[1].queueSize,str,10);
-        putsUart0(str);
-        putsUart0("\t\t[ ");
-        for(i = 0; i < MAX_QUEUE_SIZE; i++)
-        {
-            putsUart0("0x0000");
-            selfIToA(semaphores[1].processQueue[i],str,16);
-            putsUart0(str);
-            putsUart0(" ");
-        }
-        putsUart0("]\n");
-
-
-        putsUart0("KeyReleaced\t");
-        selfIToA(semaphores[2].count,str,10);
-        putsUart0(str);
-        putsUart0("\t");
-        selfIToA(semaphores[2].queueSize,str,10);
-        putsUart0(str);
-        putsUart0("\t\t[ ");
-        for(i = 0; i < MAX_QUEUE_SIZE; i++)
-        {
-            putsUart0("0x0000");
-            selfIToA(semaphores[2].processQueue[i],str,16);
-            putsUart0(str);
-            putsUart0(" ");
-        }
-        putsUart0("]\n");
-
-        putsUart0("FlashReq\t");
-        selfIToA(semaphores[3].count,str,10);
-        putsUart0(str);
-        putsUart0("\t");
-        selfIToA(semaphores[3].queueSize,str,10);
-        putsUart0(str);
-        putsUart0("\t\t[ ");
-        for(i = 0; i < MAX_QUEUE_SIZE; i++)
-        {
-            putsUart0("0x0000");
-            selfIToA(semaphores[3].processQueue[i],str,16);
-            putsUart0(str);
-            putsUart0(" ");
-        }
-        putsUart0("]\n");
-
-
-        putsUart0("Resource\t");
-        selfIToA(semaphores[4].count,str,10);
-        putsUart0(str);
-        putsUart0("\t");
-        selfIToA(semaphores[4].queueSize,str,10);
-        putsUart0(str);
-        putsUart0("\t\t[ ");
-        for(i = 0; i < MAX_QUEUE_SIZE; i++)
-        {
-            putsUart0("0x0000");
-            selfIToA(semaphores[4].processQueue[i],str,16);
-            putsUart0(str);
-            putsUart0(" ");
-        }
-        putsUart0("]\n");
+        semaphore2* temp = (semaphore2* )*((uint32_t*)getPSP());
+        ipcsinfo(temp);
         break;
     }
     case KILL:
@@ -965,27 +923,18 @@ void svCallIsr()
     }
     case PMAP:
     {
-        char str[10];
-        putsUart0("Memory Information:\nName\t\tAddress\t\tStack/Heap Size\n");
+
         uint32_t* psp = (uint32_t*  )*((uint32_t*)getPSP());
+        memmap* mem = (uint32_t*  )*(((uint32_t*)getPSP()) + 1);
+
         uint32_t dif ,pidint;
         for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
         {
            if(tcb[i].pid == psp)
            {
-               putsUart0(tcb[i].name);
-               putsUart0("\t");
-               putsUart0("0x");
-               selfIToA(tcb[i].spInit,str,16);
-               putsUart0(str);
-               putsUart0("\t");
-               dif =  tcb[i].spInit - tcb[i].sp;
-               dif = hex2int((char *)dif);
-               dif = (dif * 32)/8 ;// # of bits = (dif * 32 bytes/block)/ 8 bytes/bit
-               selfIToA(dif,str,10);
-               putsUart0(str);
-               putsUart0("Bits\n");
-
+               stringCopy(mem[1].name,tcb[i].name);
+               mem[1].spInit = tcb[i].spInit;
+               mem[1].sp = tcb[i].sp;
            }
         }
         break;//sub sp and spinit
@@ -1241,6 +1190,32 @@ uint8_t readPbs()
 // REQUIRED: add any custom code in this space
 //-----------------------------------------------------------------------------
 
+
+void ipcsinfo(semaphore2* temp)
+{
+    uint8_t i, j;
+    stringCopy(temp[0].name,"EMPTY!!");
+    stringCopy(temp[1].name,"keyPressed");
+    stringCopy(temp[2].name,"keyReleased");
+    stringCopy(temp[3].name,"flashReq");
+    stringCopy(temp[4].name,"resource");
+    for(i = 0; i < MAX_SEMAPHORES; i++)
+    {
+        temp[i].queueSize = semaphores[i].queueSize;
+        for(j = 0; j < 5; j++)
+        {
+            temp[i].processQueue[j] = semaphores[i].processQueue[j];
+        }
+        temp[i].count = semaphores[i].count;
+
+
+    }
+
+//    keyPressed  1
+//    #define keyReleased 2
+//    #define flashReq    3
+//    #define resource    4
+}
 
 
 
@@ -1566,11 +1541,14 @@ void shell()
             if(strCmp(str, "on") == 0)
             {
                 preempt(1);
+                putsUart0("Preempt Set ON\n");
                 valid = true;
             }
             else if(strCmp(str, "off") == 0)
             {
                 preempt(0);
+                putsUart0("Preempt Set OFF\n");
+
                 valid = true;
             }
         }
@@ -1589,8 +1567,35 @@ void shell()
         }
         else if (isCommand(&data, "ipcs", 0))
         {
+            char str[10];
+            semaphore2 sem[MAX_SEMAPHORES];
+            uint8_t i, j;
             valid = true;
-            ipcs();
+            ipcs(sem);
+
+            putsUart0("Semaphore Information:\nName\t\tCount\tQueue_Size\tQueue\n");
+            for(i = 1 ; i < MAX_SEMAPHORES; i++)
+            {
+                putsUart0(sem[i].name);
+                putsUart0("\t");
+                selfIToA(sem[i].count,str,10);
+                putsUart0(str);
+                putsUart0("\t");
+                selfIToA(sem[i].queueSize,str,10);
+                putsUart0(str);
+                putsUart0("\t\t[ ");
+                for(j = 0; j < MAX_QUEUE_SIZE; j++)
+                   {
+                       putsUart0("0x0000");
+                       selfIToA(sem[i].processQueue[j],str,16);
+                       putsUart0(str);
+                       putsUart0(" ");
+                   }
+                   putsUart0("]\n");
+            }
+
+
+
         }
         else if (isCommand(&data, "kill", 1))
         {
@@ -1603,11 +1608,28 @@ void shell()
         }
         else if (isCommand(&data, "pmap", 1))
         {
-            int pidint;
+            uint32_t pidint, dif;
+            memmap memmap[2];
             char* pid = getFieldString(&data, 1);
 
             pidint = (uint32_t*)hex2int(pid);
-            pmap(pidint);
+            pmap(pidint, memmap);
+
+            char str[10];
+            putsUart0("Memory Information:\nName\t\tAddress\t\tStack/Heap Size\n");
+
+            putsUart0(memmap[1].name);
+            putsUart0("\t");
+            putsUart0("0x");
+            selfIToA(memmap[1].spInit,str,16);
+            putsUart0(str);
+            putsUart0("\t");
+            dif =  memmap[1].spInit - memmap[1].sp;
+            dif = hex2int((char *)dif);
+            dif = (dif * 32)/8 ;// # of bits = (dif * 32 bytes/block)/ 8 bytes/bit
+            selfIToA(dif,str,10);
+            putsUart0(str);
+            putsUart0("Bits\n");
             valid = true;
         }
         else if (isCommand(&data, "sched", 1))
@@ -1617,11 +1639,13 @@ void shell()
             if(strCmp(str, "prio") == 0)
             {
                 schedlr(1);
+                putsUart0("Scheduler Set PRIO\n");
                 valid = true;
             }
             else if(strCmp(str, "rr") == 0)
             {
                 schedlr(0);
+                putsUart0("Scheduler Set RR\n");
                 valid = true;
             }
         }
