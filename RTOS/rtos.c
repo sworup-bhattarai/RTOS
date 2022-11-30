@@ -130,6 +130,8 @@ typedef void (*_fn)();
 #define MAX_SEMAPHORES 5
 #define MAX_QUEUE_SIZE 5
 
+
+
 typedef struct _semaphore
 {
     uint16_t count;
@@ -154,6 +156,14 @@ typedef struct _memorymap
     uint32_t sp;
 } memmap;
 
+typedef struct _PSinfo
+{
+    char name[15];
+    uint32_t cpuTime;
+    uint32_t prio;
+} PSInfo;
+
+
 // task
 #define STATE_INVALID    0 // no task
 #define STATE_UNRUN      1 // task has never been run
@@ -165,11 +175,12 @@ typedef struct _memorymap
 #define MAX_TASKS 12       // maximum number of valid tasks
 uint8_t taskCurrent = 0;   // index of last dispatched task
 uint8_t taskCount = 0;     // total number of valid tasks
-uint32_t  *heap = ( uint32_t *)0x20001000;
+uint32_t  *heap = ( uint32_t *)0x20001800;
 uint32_t prioLastRun[7];
-uint8_t sched = 1;
-uint16_t preemptOnOff = 1;
+uint8_t sched = 0;
+uint16_t preemptOnOff = 0;
 uint32_t numSwitch = 0;
+uint32_t time = 0;
 
 // REQUIRED: add store and management for the memory used by the thread stacks
 //           thread stacks must start on 1 kiB boundaries so mpu can work correctly
@@ -182,10 +193,18 @@ struct _tcb
     void *sp;                      // current stack pointer
     int8_t priority;               // 0=highest to 7=lowest
     uint32_t ticks;                // ticks until sleep complete
-    uint32_t srd;                  // MPU subregion disable bits (one per 1 KiB) (sET TO 1 MEANS YOU CAN READ AND WRITE )
+    uint32_t srd;                  // MPU subregion disable bits (one per 1 KiB) (SET TO 1 MEANS YOU CAN READ AND WRITE )
     char name[16];                 // name of task used in ps command
     void *semaphore;               // pointer to the semaphore that is blocking the thread
 } tcb[MAX_TASKS];
+
+
+struct _cpuTime
+{
+    uint32_t threadTime[MAX_TASKS];
+    uint32_t totTime;
+    uint8_t running;
+} cpuTime[2];
 
 
 //-----------------------------------------------------------------------------
@@ -234,26 +253,26 @@ void allowFlashAccess(void)
 void allowPeripheralAccess(void)
 {  //                                   0000 0010          0010
     NVIC_MPU_BASE_R =  0x40000000 | NVIC_MPU_BASE_VALID | region2;
-    NVIC_MPU_ATTR_R = fullAccess | (0x25 << 1) | NVIC_MPU_ATTR_SHAREABLE | NVIC_MPU_ATTR_BUFFRABLE | NVIC_MPU_ATTR_ENABLE;
+    NVIC_MPU_ATTR_R = fullAccess | (0x25 << 1) | NVIC_MPU_ATTR_SHAREABLE  | NVIC_MPU_ATTR_BUFFRABLE | NVIC_MPU_ATTR_ENABLE;
 }
 
 void setupSramAccess(void)
 {//                                                        0011
     NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20000000 | region3 ;
 //    NVIC_MPU_NUMBER_R = 2;
-    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+    NVIC_MPU_ATTR_R = APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
 
     NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20002000 | region4 ;
 //    NVIC_MPU_NUMBER_R = 3;
-    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+    NVIC_MPU_ATTR_R = APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
 
     NVIC_MPU_BASE_R = NVIC_MPU_BASE_VALID | 0x20004000 | region5 ;
 //    NVIC_MPU_NUMBER_R = 4;
-    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+    NVIC_MPU_ATTR_R = APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
 
     NVIC_MPU_BASE_R =  NVIC_MPU_BASE_VALID | 0x20006000 | region6 ;
 //    NVIC_MPU_NUMBER_R = 4;
-    NVIC_MPU_ATTR_R = 0x00000000| APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
+    NVIC_MPU_ATTR_R = APmode1 | (0xC << 1) | NVIC_MPU_ATTR_ENABLE ;
 
 }
 
@@ -275,8 +294,9 @@ void initMpu(void)
     backgroundEnable();
     allowFlashAccess();
     allowPeripheralAccess();
-    //setupSramAccess();
+    setupSramAccess();
     enableMPU();
+
 
     // REQUIRED: call your MPU functions here
 }
@@ -546,6 +566,7 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
 {
     bool ok = false;
     uint8_t i = 0;
+    uint32_t stackbits, sbits;
     bool found = false;
     // REQUIRED:
 
@@ -567,9 +588,25 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
             stringCopy(tcb[i].name, name);// store the thread name----DONE
             tcb[i].pid = fn;
             tcb[i].sp = (uint8_t *) mallocFromHeap(stackBytes)+ stackBytes; // allocate stack space and store top of stack in sp and spInit----DONE
+            stackbits = (uint32_t)tcb[i].sp - 0x20000000;
+            stackbits = stackbits/0x400;
+            if(i == 0)
+            {
+                //stackbits = (uint32_t)tcb[i].sp - 0x20000000;
+                stackBytes = stackBytes/0x400;
+                tcb[i].srd = (stackBytes << 0x6);
+            }
+            else
+            {
+                stackbits = (uint32_t)tcb[i].sp - (uint32_t)tcb[i - 1].sp ;
+                stackbits = stackbits/0x400;
+                sbits = (uint32_t)tcb[i-1].sp - 0x20000000;
+                sbits = sbits / 0x400;
+                tcb[i].srd = (stackbits << (sbits));
+            }
             tcb[i].spInit = tcb[i].sp;
             tcb[i].priority = priority;
-            tcb[i].srd = 0;
+
             // increment task count
             taskCount++;
             ok = true;
@@ -610,9 +647,11 @@ void stopThread(_fn fn)
                     if(semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] == tcb[i].pid)
                     {
                         semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[j + 1];
+                        semaphores[(uint16_t)tcb[i].semaphore].queueSize--;
                         for(p = j; p < MAX_SEMAPHORES; p++ )
                         {
                             semaphores[(uint16_t)tcb[i].semaphore].processQueue[p] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[p + 1];
+
                         }
 
 
@@ -654,39 +693,65 @@ bool createSemaphore(uint8_t semaphore, uint8_t count)
 // by calling scheduler, setting PSP, ASP bit, TMPL bit, and PC
 void startRtos()
 {
-    NVIC_ST_RELOAD_R = MiliSec; //39999
-    NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
+    uint32_t mask;
+
+
 
     taskCurrent = rtosScheduler(); //saves the task ID in taskCurrent to be reused later
     tcb[taskCurrent].state = STATE_READY;
+
+
+
     setPSP(tcb[taskCurrent].sp);
     //call a function to do the fn and set the tmpl
+
+
+
     _fn fn = (_fn)tcb[taskCurrent].pid; //sets the location of idle's fuction to fn
+
+    mask = (uint32_t) tcb[taskCurrent].srd;
+    NVIC_MPU_NUMBER_R = 3;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 5;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 6;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+
+    NVIC_ST_RELOAD_R = MiliSec; //39999
+    NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
+    preemptOnOff = 1;
+    sched = 1;
+
     setTMPLbit();
     fn();
 
 }
-
 // REQUIRED: modify this function to yield execution back to scheduler using pendsv
 void yield() // PSP unprivilaged
 {
     __asm("     SVC     #6");    // calls svcISR with it's unique number
 }
-
 // REQUIRED: modify this function to support 1ms system timer
 // execution yielded back to scheduler until time elapses using pendsv
 void sleep(uint32_t tick)
 {
     __asm("     SVC     #7");
 }
-
 // REQUIRED: modify this function to wait a semaphore using pendsv
 void wait(int8_t semaphore)
 {
 
     __asm("     SVC     #8");
 }
-
 // REQUIRED: modify this function to signal a semaphore is available using pendsv
 void post(int8_t semaphore)
 {
@@ -703,7 +768,7 @@ void reboot()
     __asm("     SVC     #10");
 }
 
-void* ps()
+void* ps(PSInfo* psInfo)
 {
     __asm("     SVC     #11");
 }
@@ -750,6 +815,22 @@ void* kbhit()
 void systickIsr()//systic 39999 ticks N-1 (9C3F)
 {
     uint16_t i;
+    if(cpuTime[1].totTime < 1000 && cpuTime[0].totTime == 1000)
+    {
+        cpuTime[1].threadTime[taskCurrent]++;
+        cpuTime[1].totTime++;
+    }
+    else if(cpuTime[1].totTime == 1000 && cpuTime[1].running == 1)
+    {
+        for(i = 0; i < MAX_TASKS; i++)
+        {
+            cpuTime[0].threadTime[i] = 0;
+            cpuTime[0].totTime = 0;
+            cpuTime[0].running = 1;
+            cpuTime[1].running = 0;
+        }
+    }
+
     for(i = 0; i < MAX_TASKS; i++)
     {
         if(tcb[i].state == STATE_DELAYED)
@@ -761,6 +842,8 @@ void systickIsr()//systic 39999 ticks N-1 (9C3F)
             }
         }
     }
+
+
     if(preemptOnOff == 1)
     {
         NVIC_INT_CTRL_R |= NVIC_INT_CTRL_PEND_SV;
@@ -771,11 +854,35 @@ void systickIsr()//systic 39999 ticks N-1 (9C3F)
 // REQUIRED: process UNRUN and READY tasks differently
 void pendSvIsr()
 {
-
+    uint32_t mask ;
     pushR4toR11();
-    tcb[taskCurrent].sp=(uint32_t )getPSP();
+    tcb[taskCurrent].sp = (void*)getPSP();
     taskCurrent = rtosScheduler();
 
+
+    mask = (uint32_t) tcb[taskCurrent].srd;
+
+
+    NVIC_MPU_NUMBER_R = 3;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 4;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 5;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+
+    NVIC_MPU_NUMBER_R = 6;
+    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+    NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+
+//
+//    NVIC_MPU_NUMBER_R = 1;
+//    NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+//    NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
 
     if(tcb[taskCurrent].state == STATE_READY)
     {
@@ -785,15 +892,15 @@ void pendSvIsr()
     else if (tcb[taskCurrent].state == STATE_UNRUN)
     {
         tcb[taskCurrent].state = STATE_READY;
-        setPSP(tcb[taskCurrent].spInit);
-        pushToPSP((uint32_t) 0x61000000);            // xPSR
-        pushToPSP((uint32_t) tcb[taskCurrent].pid);  //PC
-        pushToPSP((uint32_t) 0xFFFFFFFD);            //LR
-        pushToPSP((uint32_t) 0x00000000);            //R12-0
-        pushToPSP((uint32_t) 0x00000000);
-        pushToPSP((uint32_t) 0x00000000);
-        pushToPSP((uint32_t) 0x00000000);
-        pushToPSP((uint32_t) 0x00000000);
+        setPSP((uint32_t*)tcb[taskCurrent].spInit);
+        pushToPSP((uint32_t*) 0x61000000);            // xPSR
+        pushToPSP((uint32_t*) tcb[taskCurrent].pid);  //PC
+        pushToPSP((uint32_t*) 0xFFFFFFFD);            //LR
+        pushToPSP((uint32_t*) 0x00000000);            //R12-0
+        pushToPSP((uint32_t*) 0x00000000);
+        pushToPSP((uint32_t*) 0x00000000);
+        pushToPSP((uint32_t*) 0x00000000);
+        pushToPSP((uint32_t*) 0x00000000);
     }
 
 
@@ -891,11 +998,54 @@ void svCallIsr()
     }
     case MALLOC:
     {
-        uint32_t psp = *((uint32_t*)getPSP());
-        void* size = (uint32_t*)mallocFromHeap(psp);
+        uint32_t size_in_bytes = *((uint32_t*)getPSP());
+        uint32_t offset, size, srd;
+        uint32_t mask;
+        char str[50];
+        void * p = heap;
+        if(!(size_in_bytes % 1024 == 0))
+        {
+            size_in_bytes = (((size_in_bytes + (1024 - 1 ))/1024) * 1024);
+        }
+    //    putsUart0("Heap Alocated From:\n0x");
+    //    selfIToA(heap, str, 16);
+    //    putsUart0(str);
+    //    putsUart0("\n");
+
+        heap = heap + size_in_bytes/4;
+        if(heap > (0x20007FFF))
+             p = NULL;
+        offset = ((uint32_t)p - 0x20000000)/0x00000400;
+        size = size_in_bytes / 1024;
+        srd = (size) << (offset);
+        tcb[taskCurrent].srd |= srd;
+
+
+        mask = (uint32_t) tcb[taskCurrent].srd;
+        NVIC_MPU_NUMBER_R = 3;
+        NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+        NVIC_MPU_ATTR_R |= (mask & 0xFF) << 8;
+
+        NVIC_MPU_NUMBER_R = 4;
+        NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+        NVIC_MPU_ATTR_R |= ((mask >> 8) & 0xFF) << 8;
+
+        NVIC_MPU_NUMBER_R = 5;
+        NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+        NVIC_MPU_ATTR_R |=  ((mask >> 16) & 0xFF) << 8;
+
+        NVIC_MPU_NUMBER_R = 6;
+        NVIC_MPU_ATTR_R  &= ~0x0000FF00;
+        NVIC_MPU_ATTR_R |=  ((mask >> 24) & 0xFF) << 8;
+
+        NVIC_ST_RELOAD_R = MiliSec; //39999
+        NVIC_ST_CTRL_R |= NVIC_ST_CTRL_ENABLE | NVIC_ST_CTRL_INTEN | NVIC_ST_CTRL_CLK_SRC;
+        preemptOnOff = 1;
+        sched = 1;
+
 
         uint32_t* psp2= ((uint32_t *)getPSP());
-        *psp2 = (uint32_t)size;
+        *psp2 = (uint32_t)p;
         break;
     }
     case REBOOT:  //done
@@ -905,7 +1055,8 @@ void svCallIsr()
     }
     case PS:
     {
-
+        PSInfo* temp = (PSInfo* )*((uint32_t*)getPSP());
+        getpsinfo(temp);
         break;
     }
     case IPCS:
@@ -924,8 +1075,8 @@ void svCallIsr()
     case PMAP:
     {
 
-        uint32_t* psp = (uint32_t*  )*((uint32_t*)getPSP());
-        memmap* mem = (uint32_t*  )*(((uint32_t*)getPSP()) + 1);
+        uint32_t* psp = (uint32_t*)*((uint32_t*)getPSP());
+        memmap* mem = (memmap*)*(((uint32_t*)getPSP()) + 1);
 
         uint32_t dif ,pidint;
         for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
@@ -986,10 +1137,12 @@ void svCallIsr()
 // REQUIRED: code this function
 void mpuFaultIsr()
 {
-    uint8_t pid;
-    pid = 0;
+    stopThread((_fn)tcb[taskCurrent].pid);
+    putsUart0("MPU fault killed process: ");
+    putsUart0(tcb[taskCurrent].name);
+    putsUart0("\n");
     char str[10];
-    selfIToA(pid, str, 10);
+    selfIToA(tcb[taskCurrent].pid, str, 16);
     putsUart0("MPU fault in process: ");
     putsUart0(str);
     putsUart0("\n");
@@ -997,7 +1150,7 @@ void mpuFaultIsr()
     uint32_t PSPval = 75;
     MSPval = getMSP();
     PSPval = getPSP();
-    uint32_t * var;
+    uint32_t* var;
     var = getPSP();
     putsUart0("MSP Value: 0x");
     selfIToA(MSPval, str, 16);
@@ -1025,7 +1178,7 @@ void mpuFaultIsr()
 // REQUIRED: code this function
 void hardFaultIsr()
 {
-    uint8_t pid;
+    uint32_t pid = tcb[taskCurrent].pid;
     char str[50];
     uint32_t MSPval = 45;
     uint32_t PSPval = 75;
@@ -1033,7 +1186,7 @@ void hardFaultIsr()
     PSPval = getPSP();
 
 
-    pid = 0;
+
     selfIToA(pid, str, 10);
     putsUart0("Hard fault in process: \nPID: ");
     putsUart0(str);
@@ -1079,8 +1232,8 @@ void hardFaultIsr()
 // REQUIRED: code this function
 void busFaultIsr()
 {
-    uint8_t pid ;
-    pid = 6;
+    uint8_t pid = tcb[taskCurrent].pid;
+
     char str[10];
     selfIToA(pid, str, 10);
     putsUart0("Bus fault in process: ");
@@ -1097,11 +1250,11 @@ void usageFaultIsr()
 {
     uint32_t pid;
 
-    char str[10];
-    pid = *((uint32_t*)getPSP());
+    char str[15];
+    pid = tcb[taskCurrent].pid;
     putsUart0("USAGE FAULT!\n");
-    putsUart0("PID:");
-    selfIToA(pid, str, 10);
+    putsUart0("PID: 0x0000");
+    selfIToA(pid, str, 16);
     putsUart0(str);
     putsUart0("\n");
 
@@ -1149,7 +1302,16 @@ void initHw()
     enablePinPullup(PB4);
     enablePinPullup(PB5);
 
-
+    SYSCTL_RCGCTIMER_R |= SYSCTL_RCGCTIMER_R1;
+    _delay_cycles(3);
+    // Configure Timer 1 as the time base
+    TIMER1_CTL_R &= ~TIMER_CTL_TAEN;                 // turn-off timer before reconfiguring
+    TIMER1_CFG_R = TIMER_CFG_32_BIT_TIMER;           // configure as 32-bit timer (A+B)
+    TIMER1_TAMR_R = TIMER_TAMR_TAMR_PERIOD;          // configure for periodic mode (count down)
+    TIMER1_TAILR_R = 40000;                       // set load value to 40e6 for 1 Hz interrupt rate
+    TIMER1_IMR_R = TIMER_IMR_TATOIM;                 // turn-on interrupts
+    NVIC_EN0_R |= 1 << (INT_TIMER1A-16);             // turn-on interrupt 37 (TIMER1A)
+    TIMER1_CTL_R |= TIMER_CTL_TAEN;
 
 }
 
@@ -1189,6 +1351,57 @@ uint8_t readPbs()
 // YOUR UNIQUE CODE
 // REQUIRED: add any custom code in this space
 //-----------------------------------------------------------------------------
+void initcpuTime()
+{
+
+    uint8_t i;
+    for(i = 0; i < MAX_TASKS; i++)
+    {
+        cpuTime[0].threadTime[i] = 0;
+        cpuTime[1].threadTime[i] = 0;
+    }
+    cpuTime[0].totTime = 0;
+    cpuTime[1].totTime = 0;
+    cpuTime[0].running = 1;
+}
+void timer1Isr()
+{
+    uint8_t i;
+    if(cpuTime[0].totTime < 1000)
+    {
+        cpuTime[0].threadTime[taskCurrent]++;
+        cpuTime[0].totTime++;
+    }
+    else if(cpuTime[0].totTime == 1000 && cpuTime[0].running == 1)
+    {
+        for(i = 0; i < MAX_TASKS; i++)
+        {
+            cpuTime[1].threadTime[i] = 0;
+            cpuTime[1].totTime = 0;
+            cpuTime[0].running = 0;
+            cpuTime[1].running = 1;
+        }
+    }
+    TIMER1_ICR_R = TIMER_ICR_TATOCINT;
+}
+
+void getpsinfo(PSInfo* temp)
+{
+    uint8_t i;
+    for(i = 0; i < taskCount; i++)
+    {
+        stringCopy(temp[i].name, tcb[i].name);
+        temp[i].prio = tcb[i].priority;
+        if(cpuTime[0].running == 0)
+        {
+            temp[i].cpuTime = cpuTime[0].threadTime[i];
+        }
+        else if(cpuTime[1].running == 0)
+        {
+            temp[i].cpuTime = cpuTime[1].threadTime[i];
+        }
+    }
+}
 
 
 void ipcsinfo(semaphore2* temp)
@@ -1269,7 +1482,7 @@ char* stringCopy(char * string_out , char * string_in)
 {
     char pointer = string_out; // sets the
     uint8_t i = 0;
-    for(i = 0; i < 16 ; i++)
+    for(i = 0; i < 25 ; i++)
     {
         string_out[i] = string_in[i];    //copies each char to the new string
         if(string_in[i] == '\0')         //checks to see if at end of string so random data is not copied
@@ -1359,16 +1572,17 @@ void idle()
         yield();
     }
 }
-//void idle2()
-//{
-//    while(true)
-//    {
-//        setPinValue(RED_LED, 1);
-//        waitMicrosecond(1000);
-//        setPinValue(RED_LED, 0);
-//        yield();
-//    }
-//}
+
+void idle2()
+{
+    while(true)
+    {
+        setPinValue(RED_LED, 1);
+        waitMicrosecond(1000);
+        setPinValue(RED_LED, 0);
+        yield();
+    }
+}
 
 void flash4Hz()
 {
@@ -1406,7 +1620,7 @@ void lengthyFn()
     // Example of allocating memory from stack
     // This will show up in the pmap command for this thread
     p = mallocc(1024);
-    *p = 0;
+    //*p = 0;
 
     while(true)
     {
@@ -1509,6 +1723,8 @@ void important()
         wait(resource);
         setPinValue(BLUE_LED, 1);
         sleep(1000);
+        yield();
+
         setPinValue(BLUE_LED, 0);
         post(resource);
     }
@@ -1517,13 +1733,13 @@ void important()
 // REQUIRED: add processing for the shell commands through the UART here
 void shell()
 {
-    yield();
+
     USER_DATA data;
     bool valid;
     char str[15];
     while (true)
     {
-        yield();
+        //yield();
         valid = false;
 
         // Get the string from the user
@@ -1563,7 +1779,78 @@ void shell()
         else if (isCommand(&data, "ps", 0))
         {
             valid = true;
-            ps();
+            char str[80];
+            PSInfo psInfo[MAX_TASKS];
+            uint8_t i, j, k;
+            uint8_t p = 0;
+            uint32_t math;
+
+            ps(psInfo);
+            yield();
+            putsUart0("PS Information:\n");
+            putsUart0("Name");
+            putsUart0("\t");
+            yield();
+            putsUart0("\t");
+            putsUart0("Prio");
+            yield();
+            putsUart0("\t");
+            putsUart0("CPU Time");
+            putsUart0("\n");
+            yield();
+            for(i = 0; i < 10; i++)
+            {
+                putsUart0(psInfo[i].name);
+                if(strCmp(psInfo[i].name, "idle") == 0 || strCmp(psInfo[i].name, "oneshot") == 0 || strCmp(psInfo[i].name, "uncoop") == 0 || strCmp(psInfo[i].name, "errant") == 0 || strCmp(psInfo[i].name, "shell") == 0)
+                {
+                    putsUart0("\t");
+                }
+                putsUart0("\t");
+                yield();
+                selfIToA(psInfo[i].prio,str,10);
+                putsUart0(str);
+                putsUart0("\t");
+                yield();
+                math = ((psInfo[i].cpuTime * 10000)/(1000));
+                selfIToA(math,str,10);
+                yield();
+                for(j = 0; j < 8 ; j++)
+                {
+                    if(str[0] == '0')
+                    {
+                        break;
+                    }
+                    if(j <= 2 && str[j] == '\0')
+                    {
+                        yield();
+                        for(k = (j + 3); k >= p; k--)
+                        {
+                            str[k + 1] = str[k];
+                            str[k] = ' ';
+                        }
+                        str[0] =  '.';
+                        break;
+                    }
+
+                    else if(str[j] == '\0')
+                    {
+                        yield();
+                        for(k = j ; k >= (j - 2); k--)
+                        {
+                            str[k + 1] = str[k];
+                            str[k] = ' ';
+                        }
+                        str[j - 2] = '.';
+                        break;
+                    }
+                }
+                yield();
+                putsUart0(str);
+                putsUart0("\n");
+                yield();
+
+            }
+            valid = true;
         }
         else if (isCommand(&data, "ipcs", 0))
         {
@@ -1572,8 +1859,21 @@ void shell()
             uint8_t i, j;
             valid = true;
             ipcs(sem);
+            yield();
+            putsUart0("Semaphore Information:");
+            putsUart0("\n");
+            putsUart0("Name");
+            putsUart0("\t");
+            putsUart0("\t");
+            yield();
+            putsUart0("Count");
+            putsUart0("\t");
+            putsUart0("Queue_Size");
+            yield();
+            putsUart0("\t");
+            putsUart0("Queue\n");
 
-            putsUart0("Semaphore Information:\nName\t\tCount\tQueue_Size\tQueue\n");
+            yield();
             for(i = 1 ; i < MAX_SEMAPHORES; i++)
             {
                 putsUart0(sem[i].name);
@@ -1581,17 +1881,22 @@ void shell()
                 selfIToA(sem[i].count,str,10);
                 putsUart0(str);
                 putsUart0("\t");
+                yield();
                 selfIToA(sem[i].queueSize,str,10);
                 putsUart0(str);
                 putsUart0("\t\t[ ");
+                yield();
+
                 for(j = 0; j < MAX_QUEUE_SIZE; j++)
-                   {
-                       putsUart0("0x0000");
-                       selfIToA(sem[i].processQueue[j],str,16);
-                       putsUart0(str);
-                       putsUart0(" ");
-                   }
-                   putsUart0("]\n");
+                {
+                   putsUart0("0x0000");
+                   selfIToA(sem[i].processQueue[j],str,16);
+                   putsUart0(str);
+                   putsUart0(" ");
+                   yield();
+                }
+                putsUart0("]\n");
+                yield();
             }
 
 
@@ -1614,21 +1919,31 @@ void shell()
 
             pidint = (uint32_t*)hex2int(pid);
             pmap(pidint, memmap);
-
+            yield();
             char str[10];
-            putsUart0("Memory Information:\nName\t\tAddress\t\tStack/Heap Size\n");
-
+            putsUart0("Memory Information:\n");
+            yield();
+            putsUart0("Name\t\t");
+            yield();
+            putsUart0("Address\t\t");
+            yield();
+            putsUart0("Stack/Heap Size\n");
+            yield();
             putsUart0(memmap[1].name);
             putsUart0("\t");
             putsUart0("0x");
+            yield();
             selfIToA(memmap[1].spInit,str,16);
             putsUart0(str);
             putsUart0("\t");
+            yield();
             dif =  memmap[1].spInit - memmap[1].sp;
             dif = hex2int((char *)dif);
             dif = (dif * 32)/8 ;// # of bits = (dif * 32 bytes/block)/ 8 bytes/bit
             selfIToA(dif,str,10);
             putsUart0(str);
+            yield();
+
             putsUart0("Bits\n");
             valid = true;
         }
@@ -1659,8 +1974,11 @@ void shell()
             name = (uint32_t)pidof(pid);
             selfIToA(name, str, 16);
             putsUart0("Process ID of ");
+            yield();
             putsUart0(pid);
+            yield();
             putsUart0(" is: 0x0000");
+            yield();
             putsUart0(str);
             putsUart0("\n");
         }
@@ -1679,6 +1997,7 @@ void shell()
         {
             putsUart0("Invalid command\n");
         }
+        yield();
 
     }
 
@@ -1694,6 +2013,7 @@ int main(void)
 
     // Initialize hardware
     initHw();
+    initcpuTime();
     initUart0();
     initMpu();
     initRtos();
@@ -1715,7 +2035,7 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok =  createThread(idle, "idle", 7, 1024);
-//    ok =  createThread(idle2, "Idle2", 7, 1024);
+//  ok =  createThread(idle2, "Idle2", 7, 1024);
 //    // Add other processes
     ok &= createThread(lengthyFn, "lengthyfn", 6, 1024);
     ok &= createThread(flash4Hz, "flash4hz", 4, 1024);
