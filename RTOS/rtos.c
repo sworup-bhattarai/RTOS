@@ -100,6 +100,8 @@
 #define PIDOF       17
 #define RUN         18
 #define KBHIT       19
+#define RUNT        20
+#define PRIO        21
 #define MALLOC      5
 #define MiliSec     0x9C3F
 
@@ -181,7 +183,8 @@ uint8_t sched = 0;
 uint16_t preemptOnOff = 0;
 uint32_t numSwitch = 0;
 uint32_t time = 0;
-
+uint32_t time1 = 0;
+uint32_t time2 = 0;
 // REQUIRED: add store and management for the memory used by the thread stacks
 //           thread stacks must start on 1 kiB boundaries so mpu can work correctly
 
@@ -619,15 +622,9 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
 // REQUIRED: modify this function to restart a thread
 void restartThread(_fn fn)
 {
-    uint8_t i, j,p;
-        for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
-        {
-            if(tcb[i].pid == fn)
-            {
-                tcb[i].sp =  tcb[i].spInit;
-                tcb[i].state = STATE_UNRUN;
-            }
-        }
+    runt((uint32_t)fn);
+
+
 }
 
 // REQUIRED: modify this function to stop a thread
@@ -635,47 +632,22 @@ void restartThread(_fn fn)
 // NOTE: see notes in class for strategies on whether stack is freed or not
 void stopThread(_fn fn)
 {
-    uint8_t i, j,p;
-    for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
-    {
-        if(tcb[i].pid == fn)
-        {
-            if(tcb[i].state == STATE_BLOCKED)
-            {
-                for(j = 0; j < MAX_SEMAPHORES; j++)
-                {
-                    if(semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] == tcb[i].pid)
-                    {
-                        semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[j + 1];
-                        semaphores[(uint16_t)tcb[i].semaphore].queueSize--;
-                        for(p = j; p < MAX_SEMAPHORES; p++ )
-                        {
-                            semaphores[(uint16_t)tcb[i].semaphore].processQueue[p] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[p + 1];
-
-                        }
-
-
-                    }
-                }
-            }
-            semaphores[(uint16_t)tcb[i].semaphore].count--;
-            tcb[i].state = STATE_STOPPED;
-            tcb[i].semaphore = 0;
-        }
-    }
+    kill((uint32_t)fn);
 }
 
 // REQUIRED: modify this function to set a thread priority
 void setThreadPriority(_fn fn, uint8_t priority)
 {
-    uint8_t i, j,p;
-       for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
-       {
-           if(tcb[i].pid == fn)
-           {
-               tcb[i].priority = priority;
-           }
-       }
+//    uint8_t i, j,p;
+//       for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+//       {
+//           if(tcb[i].pid == fn)
+//           {
+//               tcb[i].priority = priority;
+//           }
+//       }
+    prio(fn, priority);
+
 
 }
 
@@ -815,6 +787,8 @@ void* kbhit()
 void systickIsr()//systic 39999 ticks N-1 (9C3F)
 {
     uint16_t i;
+
+
     if(cpuTime[1].totTime < 1000 && cpuTime[0].totTime == 1000)
     {
         cpuTime[1].threadTime[taskCurrent]++;
@@ -830,6 +804,7 @@ void systickIsr()//systic 39999 ticks N-1 (9C3F)
             cpuTime[1].running = 0;
         }
     }
+
 
     for(i = 0; i < MAX_TASKS; i++)
     {
@@ -1048,6 +1023,21 @@ void svCallIsr()
         *psp2 = (uint32_t)p;
         break;
     }
+    case PRIO:
+    {
+        _fn fn = (_fn )*((uint32_t*)getPSP());
+        uint8_t priority = (uint8_t)*(((uint32_t*)getPSP()) + 1);
+        uint8_t i;
+        for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+        {
+          if(tcb[i].pid == fn)
+          {
+              tcb[i].priority = priority;
+          }
+        }
+         break;
+
+    }
     case REBOOT:  //done
     {
         NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
@@ -1068,7 +1058,7 @@ void svCallIsr()
     case KILL:
     {
         uint32_t* psp = (uint32_t*  )*((uint32_t*)getPSP());
-        stopThread((_fn)psp);
+        stopThreadSVC((_fn)psp);
         break;
 
     }
@@ -1121,7 +1111,13 @@ void svCallIsr()
     case RUN:
     {
         uint32_t pid = *((uint32_t*)getPSP());
-        restartThread((_fn) pid);
+        restartThread2((_fn) pid);
+        break;
+    }
+    case RUNT:
+    {
+        uint32_t pid = *((uint32_t*)getPSP());
+        restartThread2((_fn) pid);
         break;
     }
     case KBHIT:
@@ -1137,7 +1133,7 @@ void svCallIsr()
 // REQUIRED: code this function
 void mpuFaultIsr()
 {
-    stopThread((_fn)tcb[taskCurrent].pid);
+    stopThreadSVC((_fn)tcb[taskCurrent].pid);
     putsUart0("MPU fault killed process: ");
     putsUart0(tcb[taskCurrent].name);
     putsUart0("\n");
@@ -1351,10 +1347,66 @@ uint8_t readPbs()
 // YOUR UNIQUE CODE
 // REQUIRED: add any custom code in this space
 //-----------------------------------------------------------------------------
+void prio(_fn fn, uint8_t prio)
+{
+    __asm("     SVC     #21");
+}
+void restartThread2(_fn fn)
+{
+
+    uint8_t i, j,p;
+    for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+    {
+        if(tcb[i].pid == fn && tcb[i].state == STATE_STOPPED)
+        {
+            tcb[i].sp =  tcb[i].spInit;
+            tcb[i].state = STATE_UNRUN;
+        }
+    }
+}
+void* runt(uint32_t pid)
+{
+    __asm("     SVC     #20");
+}
+void stopThreadSVC(_fn fn)
+{
+    uint8_t i, j,p;
+    for(i = 0; i < MAX_TASKS - 1; i++) // checks for the next task to run in queue
+    {
+        if(tcb[i].pid == fn)
+        {
+            if(tcb[i].state == STATE_BLOCKED)
+            {
+                for(j = 0; j < MAX_SEMAPHORES; j++)
+                {
+                    if(semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] == tcb[i].pid)
+                    {
+                        semaphores[(uint16_t)tcb[i].semaphore].processQueue[j] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[j + 1];
+                        semaphores[(uint16_t)tcb[i].semaphore].queueSize--;
+                        for(p = j; p < MAX_SEMAPHORES; p++ )
+                        {
+                            semaphores[(uint16_t)tcb[i].semaphore].processQueue[p] = semaphores[(uint16_t)tcb[i].semaphore].processQueue[p + 1];
+
+                        }
+
+
+                    }
+                }
+            }
+            semaphores[(uint16_t)tcb[i].semaphore].count--;
+            tcb[i].state = STATE_STOPPED;
+            tcb[i].semaphore = 0;
+        }
+    }
+}
+
+
 void initcpuTime()
 {
 
     uint8_t i;
+    time1 = 0;
+    time2 = 0;
     for(i = 0; i < MAX_TASKS; i++)
     {
         cpuTime[0].threadTime[i] = 0;
@@ -1367,6 +1419,7 @@ void initcpuTime()
 void timer1Isr()
 {
     uint8_t i;
+
     if(cpuTime[0].totTime < 1000)
     {
         cpuTime[0].threadTime[taskCurrent]++;
@@ -1382,6 +1435,7 @@ void timer1Isr()
             cpuTime[1].running = 1;
         }
     }
+
     TIMER1_ICR_R = TIMER_ICR_TATOCINT;
 }
 
@@ -1406,20 +1460,20 @@ void getpsinfo(PSInfo* temp)
 
 void ipcsinfo(semaphore2* temp)
 {
-    uint8_t i, j;
+    uint8_t mainLoop, j;
     stringCopy(temp[0].name,"EMPTY!!");
     stringCopy(temp[1].name,"keyPressed");
     stringCopy(temp[2].name,"keyReleased");
     stringCopy(temp[3].name,"flashReq");
     stringCopy(temp[4].name,"resource");
-    for(i = 0; i < MAX_SEMAPHORES; i++)
+    for(mainLoop = 0; mainLoop < MAX_SEMAPHORES; mainLoop++)
     {
-        temp[i].queueSize = semaphores[i].queueSize;
+        temp[mainLoop].queueSize = semaphores[mainLoop].queueSize;
         for(j = 0; j < 5; j++)
         {
-            temp[i].processQueue[j] = semaphores[i].processQueue[j];
+            temp[mainLoop].processQueue[j] = semaphores[mainLoop].processQueue[j];
         }
-        temp[i].count = semaphores[i].count;
+        temp[mainLoop].count = semaphores[mainLoop].count;
 
 
     }
@@ -1779,7 +1833,7 @@ void shell()
         else if (isCommand(&data, "ps", 0))
         {
             valid = true;
-            char str[80];
+            char str[15];
             PSInfo psInfo[MAX_TASKS];
             uint8_t i, j, k;
             uint8_t p = 0;
@@ -1820,7 +1874,7 @@ void shell()
                     {
                         break;
                     }
-                    if(j <= 2 && str[j] == '\0')
+                    else if(j <= 1 && str[j] == '\0')
                     {
                         yield();
                         for(k = (j + 3); k >= p; k--)
@@ -1828,6 +1882,15 @@ void shell()
                             str[k + 1] = str[k];
                             str[k] = ' ';
                         }
+                        str[0] =  '.';
+                        break;
+                    }
+                    else if(j == 2 && str[j] == '\0')
+                    {
+
+                        str[j + 1] = str[j];
+                        str[j] = str[j - 1];
+                        str[j - 1] = str[j - 2];
                         str[0] =  '.';
                         break;
                     }
@@ -1944,7 +2007,7 @@ void shell()
             putsUart0(str);
             yield();
 
-            putsUart0("Bits\n");
+            putsUart0("B\n");
             valid = true;
         }
         else if (isCommand(&data, "sched", 1))
