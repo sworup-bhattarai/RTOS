@@ -163,6 +163,7 @@ typedef struct _PSinfo
     char name[15];
     uint32_t cpuTime;
     uint32_t prio;
+    uint8_t state;
 } PSInfo;
 
 
@@ -1446,6 +1447,7 @@ void getpsinfo(PSInfo* temp)
     {
         stringCopy(temp[i].name, tcb[i].name);
         temp[i].prio = tcb[i].priority;
+        temp[i].state = tcb[i].state;
         if(cpuTime[0].running == 0)
         {
             temp[i].cpuTime = cpuTime[0].threadTime[i];
@@ -1850,6 +1852,9 @@ void shell()
             yield();
             putsUart0("\t");
             putsUart0("CPU Time");
+            yield();
+            putsUart0("\t");
+            putsUart0("State");
             putsUart0("\n");
             yield();
             for(i = 0; i < 10; i++)
@@ -1908,6 +1913,10 @@ void shell()
                     }
                 }
                 yield();
+
+                putsUart0(str);
+                putsUart0("\t\t");
+                selfIToA(psInfo[i].state,str,10);
                 putsUart0(str);
                 putsUart0("\n");
                 yield();
